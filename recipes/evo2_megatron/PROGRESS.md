@@ -25,7 +25,7 @@ _Last updated: 2026-06-28_
 | 2 | Autoregressive generation (`infer_evo2`) | Quick start | ✅ | `/data/generated.jsonl`, greedy (`--top-k 1`), valid ACGT continuation |
 | 3 | Batch sequence scoring (`predict_evo2`) | Quick start | ✅ | 3-seq FASTA → `/data/predictions/*.pt`; mean log-probs `[-0.31, -0.60, -0.31]` |
 | 4 | Data preprocessing (`preprocess_evo2`) | Quick start | ✅ | 12-seq FASTA → `/data/preproc_out` train/val/test `.bin/.idx` (24 samples); CPU-only |
-| 5 | Transcript extraction (`splice_evo2`) | Quick start | ⬜ | Needs genome FASTA + GTF |
+| 5 | Transcript extraction (`splice_evo2`) | Quick start | ✅ | chr1 + 2-exon GTF → `/data/transcripts.fa`; spliced seq matches expected. GTF needs gbkey/transcript_biotype + all values quoted |
 
 ## Checkpoint maintenance
 

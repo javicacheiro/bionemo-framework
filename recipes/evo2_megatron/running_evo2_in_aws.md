@@ -347,7 +347,44 @@ Success = it exits cleanly and writes `.bin`/`.idx` pairs for each split. Verifi
 
 ### Transcript extraction (splice_evo2)
 
-(in progress)
+Extract spliced transcripts (concatenated exons) from a genome FASTA + GTF. We
+built a 120 bp single-contig genome `/data/genome.fa` (`>chr1`) and a minimal GTF
+`/data/genes.gtf` with one gene / one transcript / two exons (1–30 and 61–90,
+`+` strand):
+
+```
+chr1	test	gene	1	90	.	+	.	gene_id "gene1";
+chr1	test	transcript	1	90	.	+	.	gene_id "gene1"; transcript_id "t1"; gbkey "mRNA"; transcript_biotype "mRNA";
+chr1	test	exon	1	30	.	+	.	gene_id "gene1"; transcript_id "t1"; exon_number "1";
+chr1	test	exon	61	90	.	+	.	gene_id "gene1"; transcript_id "t1"; exon_number "2";
+```
+
+```bash
+splice_evo2 \
+  --fasta-path /data/genome.fa \
+  --gtf-path /data/genes.gtf \
+  --output-path /data/transcripts.fa \
+  --only-longest-transcript
+```
+
+Success = it exits cleanly and writes the spliced transcript. Verified: the
+output `/data/transcripts.fa` is
+
+```
+>chr1|gene1|t1
+TTTCCTCATGCAATTCAAAACCATGTCCGTGAGGATACCAAATTCCTCCTTATTCAGGAC
+```
+
+i.e. exactly `genome[0:30] + genome[60:90]` (60 bp = exon1 + exon2 concatenated,
+introns removed) — matching the value we computed independently. CPU-only.
+
+**GTF format gotchas (the parser is strict / NCBI-RefSeq-shaped):**
+
+1. **`transcript` features must carry `gbkey` and `transcript_biotype`** in
+   addition to `gene_id`/`transcript_id` — otherwise `KeyError: 'gbkey'`.
+2. **Every attribute value must be double-quoted**, including numeric ones like
+   `exon_number "1"`. An unquoted value (`exon_number 1;`) raises
+   `IndexError: list index out of range` in `parse_gtf_attributes`.
 
 ## Notes
 
