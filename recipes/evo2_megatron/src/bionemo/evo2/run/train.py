@@ -978,6 +978,12 @@ def train(args: argparse.Namespace) -> None:
         cfg.logger.log_interval = args.log_interval
     if args.disable_tensorboard_logger:
         cfg.logger.tensorboard_dir = None
+    if args.lora_finetune:
+        # report_l2_norm_grad() iterates over all parameters reading ``.main_grad``, which the
+        # frozen LoRA base parameters never get -> AttributeError at the first log step. The metrics
+        # block only runs when some logger (tensorboard *or* wandb) is active, so this previously
+        # only surfaced with tensorboard; enabling wandb re-triggers it. Disable it for LoRA.
+        cfg.logger.log_l2_norm_grad_to_tensorboard = False
     if args.wandb_project:
         # Assuming WandbConfig is available in megatron.bridge.training.config
         default_wandb_run_name = (

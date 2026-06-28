@@ -257,8 +257,11 @@ checkpoint. Verified result:
    `log_l2_norm_grad_to_tensorboard=True` (`recipes/evo2.py`), and that code path
    touches `.main_grad` on the **frozen** LoRA base parameters, which never get a
    grad buffer. There is no dedicated CLI flag to disable only the l2-norm
-   logging, so disabling the tensorboard logger entirely is the workaround.
+   logging, so disabling the tensorboard logger entirely was the workaround.
    (Standard non-LoRA training is unaffected because all params are trainable.)
+   **Update:** now fixed in `run/train.py` — `--lora-finetune` forces
+   `log_l2_norm_grad_to_tensorboard=False`, so LoRA runs cleanly with wandb and/or tensorboard and
+   this workaround is no longer needed. See "Logging training to Weights & Biases" below.
 
 ### Inference on a LoRA checkpoint (infer_evo2 / predict_evo2)
 
@@ -380,6 +383,75 @@ from: .../iter_0000008` (PEFT auto-detected via `run_config.yaml`). Per-sequence
 `exp(-mean_logprob)`: mean **base 3.533 → LoRA 3.528**, lower on all 5 sequences — the expected
 direction (and expectedly tiny after only 8 smoke steps). Pipeline confirmed end-to-end; a real
 run uses `--seq-length 16384` and a real `--max-steps`.
+
+### Logging training to Weights & Biases (wandb)
+
+`train_evo2` can stream the training/validation loss curve, learning rate, throughput, etc. to
+wandb (this is the loss-curve source the `Evo2_virus` report asks for).
+
+1. **Log in once inside the container** (credentials persist in `/root/.netrc`):
+
+   ```bash
+   wandb login    # paste your API key
+   ```
+
+2. **Enable it on the training command** with these flags:
+
+   | Flag | Effect |
+   |---|---|
+   | `--wandb-project <name>` | **Turns wandb on** (absent → no wandb). e.g. `evo2-viral-lora`. |
+   | `--wandb-run-name <name>` | Optional run name. If omitted, a very long auto name is built from every hyperparameter. |
+   | `--wandb-entity <team>` | Optional team/org; defaults to your personal entity. |
+
+   On startup the log prints the run URL, e.g.
+   `wandb: 🚀 View run at https://wandb.ai/<entity>/evo2-viral-lora/runs/<id>`, and metrics sync
+   online. wandb is independent of tensorboard, so it works together with
+   `--disable-tensorboard-logger`.
+
+> **Gotcha — LoRA + any logger hit `'Parameter' object has no attribute 'main_grad'` (now fixed
+> in code).** At each log interval `megatron.bridge`'s `training_log` calls
+> `report_l2_norm_grad(model)`, which reads `.main_grad` on **every** parameter — but LoRA's frozen
+> base parameters never get a `main_grad` buffer, so it raises `AttributeError`. That metrics block
+> only runs when *some* logger is active, which is why the earlier mock-LoRA example avoided it by
+> disabling tensorboard with no wandb — turning wandb on re-activates the block and re-triggers the
+> crash. The recipe hard-codes `log_l2_norm_grad_to_tensorboard=True` (`recipes/evo2.py`) with no
+> CLI flag, so the fix is in `run/train.py`: when `--lora-finetune` is set it now forces
+> `cfg.logger.log_l2_norm_grad_to_tensorboard = False`. With that, **LoRA + wandb runs cleanly**
+> (the only metric dropped is the l2 grad-norm, which is meaningless for mostly-frozen params).
+> Note: `run/train.py` is the image's baked copy at `/workspace/bionemo/src/...`, **not** the host
+> bind-mount, so this patch was applied both in the host repo (git source of truth) and inside the
+> running container to test.
+
+**Verified:** added `--wandb-project evo2-viral-lora --wandb-run-name viral-lora-1b-seq16384` to the
+seq-16384 viral LoRA run. The log shows `Currently logged in as: <user>` →
+`Syncing run viral-lora-1b-seq16384` → a `View run at https://wandb.ai/...` URL, and training
+cleared the first log interval (iteration 20, `lm loss 1.238`) — exactly matching the no-wandb run,
+confirming the l2-norm fix changes only logging, not the optimization.
+
+### Viral LoRA at seq-length 16384 (full run)
+
+The same viral pipeline at the recommended `--seq-length 16384` on 8× H200, pure data parallel
+(`--nproc-per-node 8`, `--micro-batch-size 1 --global-batch-size 16`) plus
+`--activation-checkpoint-recompute-num-layers 1`. Fits with ~16 GB/143 GB per GPU and runs at
+**~1.27 s/step, ~255 TFLOP/s/GPU**. Train is ~172M tokens → ~10,500 windows of 16384 per epoch
+(~660 steps at GBS 16), so `--max-steps 1000` ≈ 1.5 epochs in ~22 min (plus a one-time ~13 min
+base-checkpoint-load + dataset-index-build at startup).
+
+Verified full 1000-step run (wandb run `viral-lora-1b-seq16384`):
+
+- **Training loss** fell **1.24 → ~1.12** over 1000 steps (logged to wandb).
+- **Validation PPL** improved monotonically across the 4 eval points: **3.263 (250) → 3.207 (500)
+  → 3.167 (750) → 3.172 (1000)**, vs the base model's ~3.45 — best at iter 750. Four adapter-only
+  checkpoints (149 MB each) saved under `/data/viral/lora_run_16k/evo2/checkpoints/iter_0000{250,
+  500,750,1000}`.
+- **Base vs LoRA** via `predict_evo2` on a 5-record valid subset (capped 2048 bp), same FASTA for
+  both: mean per-sequence PPL **3.533 (base) → 3.509 (LoRA iter_1000)**, lower on 4 of 5 sequences.
+  (The windowed in-training validation above shows a larger gap because it teacher-forces over full
+  16384-token windows of the whole val split, whereas this scores capped per-record sequences; both
+  agree the adapter improves the viral fit.)
+
+Stratified per-`genome` perplexity for the report is the same `predict_evo2` run over the full
+`data/valid.fasta`, joining each `record` to the manifest `genome` column.
 
 ### Data preprocessing (preprocess_evo2)
 

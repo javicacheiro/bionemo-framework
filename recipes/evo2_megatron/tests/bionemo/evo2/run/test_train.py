@@ -643,3 +643,44 @@ def test_distributed_training_gradient_equivalence(
 
     checkpoint_dirs = [str(base_checkpoint), str(parallel_checkpoint)]
     assert_optimizer_states_match(checkpoint_dirs)
+
+
+def test_lora_finetune_disables_l2_norm_grad_logging(monkeypatch):
+    """`--lora-finetune` must turn off l2-norm-grad logging.
+
+    With LoRA, ``report_l2_norm_grad`` reads ``.main_grad`` on the frozen base parameters (which
+    never get a grad buffer) at the first log step, raising
+    ``AttributeError: 'Parameter' object has no attribute 'main_grad'``. That metrics block runs
+    whenever *any* logger (tensorboard or wandb) is active, so ``run.train`` forces
+    ``cfg.logger.log_l2_norm_grad_to_tensorboard = False`` when ``--lora-finetune`` is set. This
+    captures the assembled config (monkeypatching ``pretrain`` so no training launches) and checks
+    the toggle both on and off. CPU-only.
+    """
+    import bionemo.evo2.run.train as train_module
+
+    captured: Dict[str, object] = {}
+
+    class _StopBeforePretrain(Exception):
+        pass
+
+    def _capture_cfg(cfg, *args, **kwargs):
+        captured["cfg"] = cfg
+        raise _StopBeforePretrain
+
+    monkeypatch.setattr(train_module, "pretrain", _capture_cfg)
+
+    base = (
+        "--mock-data --model-size evo2_1b_base --max-steps 2 --warmup-steps 1 --decay-steps 2 "
+        "--eval-interval 2 --eval-iters 1 --global-batch-size 2 --micro-batch-size 1 --seq-length 64"
+    )
+
+    # LoRA on -> l2-norm-grad logging disabled (otherwise the run crashes at the first log step).
+    with pytest.raises(_StopBeforePretrain):
+        train_module.train(train_module.parse_args(shlex.split(base + " --lora-finetune")))
+    assert captured["cfg"].logger.log_l2_norm_grad_to_tensorboard is False
+
+    # LoRA off -> recipe default preserved (l2-norm-grad logging stays on).
+    captured.clear()
+    with pytest.raises(_StopBeforePretrain):
+        train_module.train(train_module.parse_args(shlex.split(base)))
+    assert captured["cfg"].logger.log_l2_norm_grad_to_tensorboard is True
