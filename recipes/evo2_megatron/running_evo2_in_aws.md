@@ -299,6 +299,88 @@ Success = both exit cleanly and reload the base model automatically. Verified:
 - The base checkpoint at `pretrained_checkpoint` must still exist on disk; it does
   (`/data/evo2_1b_mbridge`).
 
+### Viral LoRA continue-pretraining end-to-end (Evo2_virus dataset)
+
+Full JSONL → FASTA → `preprocess_evo2` → `train_evo2 --lora-finetune` → `predict_evo2`
+base-vs-LoRA pipeline on the real viral corpus in `Evo2_virus/`. The recipe-specific
+instructions live in [`Evo2_virus/README.md`](Evo2_virus/README.md); this is the verified run.
+
+**1. JSONL → FASTA** (the dataset's `text`→sequence, `record`→header; data is already
+U→T/uppercased). Written into `/data/viral/` so the container sees it (`Evo2_virus/data/` is in
+the host repo, not the `/data` bind mount):
+
+```bash
+for split in train valid; do
+  zcat Evo2_virus/data/${split}.jsonl.gz | python3 -c '
+import json, sys
+with open(sys.argv[1], "w") as g:
+    for line in sys.stdin:
+        r = json.loads(line); g.write(">" + r["record"] + "\n" + r["text"] + "\n")
+' /data/viral/${split}.fasta
+done
+```
+
+Verified: 12,944 train / 1,349 valid records (matches the dataset's split table).
+
+**2. `preprocess_evo2`** (CPU-only, ~55 s for 172 MB of train FASTA with `workers: 8`). Config is
+a YAML **list**, one entry per split, each forced entirely into one split to preserve the
+species-holdout split (`train_split: 1.0` for train; `valid_split: 1.0` for valid), tokenizer
+`nucleotide_fast_tokenizer_512`, `transcribe: null` + `embed_reverse_complement: false`
+(the data is already processed). Produced
+`viral_train_..._train.{bin,idx}` (172 MB) and `viral_valid_..._val.{bin,idx}` (17 MB) in
+`/data/viral/preprocessed/`.
+
+> **Gotcha — the two entries must use different `output_prefix`.** `preprocess_evo2` writes a
+> `{train,val,test}` triple per entry and **skips a run if any output with that prefix already
+> exists** (`overwrite: false` default). Sharing one prefix → the second (valid) entry is silently
+> skipped and `_val.bin` is left at 0 bytes. Used `viral_train` / `viral_valid`.
+
+**3. Blended dataset YAML** (`/data/viral/viral_dataset.yaml`):
+
+```yaml
+- {dataset_prefix: /data/viral/preprocessed/viral_train_nucleotide_fast_tokenizer_512_train, dataset_weight: 1.0, dataset_split: train}
+- {dataset_prefix: /data/viral/preprocessed/viral_valid_nucleotide_fast_tokenizer_512_val,   dataset_weight: 1.0, dataset_split: validation}
+- {dataset_prefix: /data/viral/preprocessed/viral_valid_nucleotide_fast_tokenizer_512_val,   dataset_weight: 1.0, dataset_split: test}
+```
+
+> **Gotcha — a `test` split entry is required.** The Evo2 dataset provider always calls
+> `get_blend_from_list(paths["test"])`; with no test entry, `train_evo2` aborts during data setup
+> with `ValueError: not enough values to unpack (expected 2, got 0)`. This corpus has no test set,
+> so point `test` at the valid prefix (validation and test losses then come out identical).
+
+**4. LoRA training smoke** (real viral data, 8 steps, `--seq-length 1024` for speed; same two
+LoRA gotchas as the mock-data example above — `--disable-tensorboard-logger`,
+`--warmup-steps`/`--decay-steps`):
+
+```bash
+torchrun --nproc-per-node 2 --no-python train_evo2 \
+  --dataset-config /data/viral/viral_dataset.yaml \
+  --finetune-ckpt-dir /data/evo2_1b_mbridge --model-size evo2_1b_base \
+  --hf-tokenizer-model-path tokenizers/nucleotide_fast_tokenizer_512 \
+  --mixed-precision-recipe bf16_mixed --seq-length 1024 \
+  --micro-batch-size 4 --global-batch-size 8 \
+  --max-steps 8 --warmup-steps 10 --decay-steps 100 --eval-interval 10 --eval-iters 2 \
+  --lr 3e-4 --min-lr 3e-5 --log-interval 2 --disable-tensorboard-logger \
+  --result-dir /data/viral/lora_run \
+  --lora-finetune --lora-dim 16 --lora-alpha 32 --lora-dropout 0.1 \
+  --lora-target-modules "dense_projection,linear_qkv,linear_proj,linear_fc1,linear_fc2"
+```
+
+Verified: trained 8 iters (~0.22 s/step, ~100 TFLOP/s/GPU), `lm loss` fell 1.40 → ~1.24 on **real**
+viral data (vs the meaningless ~11 on mock random data), saved a **149 MB** adapter-only checkpoint
+at `/data/viral/lora_run/evo2/checkpoints/iter_0000008`. Reported **validation `lm loss` 1.241,
+PPL 3.458** (4-letter alphabet → max PPL 4, so this is a real, sensible number).
+
+**5. Base vs LoRA scoring** with `predict_evo2` on a length-capped 5-record valid subset
+(`--micro-batch-size 1 --write-interval epoch --output-log-prob-seqs --log-prob-collapse-option
+mean`), once with `--ckpt-dir /data/evo2_1b_mbridge/iter_0000001` and once with
+`--ckpt-dir /data/viral/lora_run/evo2/checkpoints/iter_0000008`. The LoRA run logs
+`Loading base model weights from: /data/evo2_1b_mbridge/iter_0000001` → `Loading adapter weights
+from: .../iter_0000008` (PEFT auto-detected via `run_config.yaml`). Per-sequence perplexity
+`exp(-mean_logprob)`: mean **base 3.533 → LoRA 3.528**, lower on all 5 sequences — the expected
+direction (and expectedly tiny after only 8 smoke steps). Pipeline confirmed end-to-end; a real
+run uses `--seq-length 16384` and a real `--max-steps`.
+
 ### Data preprocessing (preprocess_evo2)
 
 Convert FASTA → Megatron indexed binary. The config is a YAML **list** (note the
