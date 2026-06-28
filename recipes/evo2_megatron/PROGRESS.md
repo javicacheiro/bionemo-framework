@@ -24,7 +24,7 @@ _Last updated: 2026-06-28_
 | 1 | Training with mock data (Hyena, `train_evo2`, `striped_hyena_1b_nv_parallel`) | Quick start | ✅ | Confirmed run; documented in running_evo2_in_aws.md (`--result-dir tmpfp8`) |
 | 2 | Autoregressive generation (`infer_evo2`) | Quick start | ✅ | `/data/generated.jsonl`, greedy (`--top-k 1`), valid ACGT continuation |
 | 3 | Batch sequence scoring (`predict_evo2`) | Quick start | ✅ | 3-seq FASTA → `/data/predictions/*.pt`; mean log-probs `[-0.31, -0.60, -0.31]` |
-| 4 | Data preprocessing (`preprocess_evo2`) | Quick start | ⬜ | Needs a `preprocess_config.yaml` + input FASTA |
+| 4 | Data preprocessing (`preprocess_evo2`) | Quick start | ✅ | 12-seq FASTA → `/data/preproc_out` train/val/test `.bin/.idx` (24 samples); CPU-only |
 | 5 | Transcript extraction (`splice_evo2`) | Quick start | ⬜ | Needs genome FASTA + GTF |
 
 ## Checkpoint maintenance

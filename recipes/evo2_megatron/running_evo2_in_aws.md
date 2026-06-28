@@ -299,6 +299,56 @@ Success = both exit cleanly and reload the base model automatically. Verified:
 - The base checkpoint at `pretrained_checkpoint` must still exist on disk; it does
   (`/data/evo2_1b_mbridge`).
 
+### Data preprocessing (preprocess_evo2)
+
+Convert FASTA → Megatron indexed binary. The config is a YAML **list** (note the
+leading `-`); full schema is in `src/bionemo/evo2/data/README.md`. We made a tiny
+12-sequence random FASTA at `/data/preproc_input.fasta` and this config at
+`/data/preprocess_config.yaml`:
+
+```yaml
+- datapaths: ["/data/preproc_input.fasta"]
+  output_dir: "/data/preproc_out"
+  output_prefix: smoke
+  train_split: 0.6
+  valid_split: 0.2
+  test_split: 0.2
+  overwrite: true
+  embed_reverse_complement: true
+  transcribe: "back_transcribe"
+  force_uppercase: true
+  indexed_dataset_dtype: "uint8"
+  tokenizer_type: "Byte-Level"
+  fast_hf_tokenizer: true
+  append_eod: true
+  workers: 1
+  chunksize: 25
+  drop_empty_sequences: true
+  nnn_filter: true
+  seed: 42
+```
+
+```bash
+preprocess_evo2 -c /data/preprocess_config.yaml
+```
+
+Success = it exits cleanly and writes `.bin`/`.idx` pairs for each split. Verified:
+
+- Output files in `/data/preproc_out/`:
+  `smoke_nucleotide_fast_tokenizer_256_{train,val,test}.{bin,idx}`.
+- They load via `megatron.core.datasets.indexed_dataset.IndexedDataset`: 14 train
+  / 4 val / 6 test samples (24 total = 12 sequences × 2 from
+  `embed_reverse_complement`), byte-level tokens (65=A, 67=C, 71=G, 84=T).
+- This is CPU-only — no `torchrun`/GPU needed.
+
+> Note: the output filename embeds `nucleotide_fast_tokenizer_256` even though the
+> config requests `Byte-Level`; with `fast_hf_tokenizer: true` the byte-level DNA
+> tokenizer is realised as the bundled 256-vocab fast tokenizer.
+
+### Transcript extraction (splice_evo2)
+
+(in progress)
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.
