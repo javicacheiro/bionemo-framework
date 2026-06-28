@@ -449,6 +449,69 @@ Verified: `Loaded 254 keys` → `Converted to 270 vortex keys` →
 Savanna→MBridge→Vortex chain is functional once the step-1 `weights_only` issue
 is addressed.
 
+## Example notebooks (Jupyter)
+
+### How to run the notebooks headless (important kernel setup)
+
+The `examples/*.ipynb` notebooks need two adjustments to run headless in this
+container:
+
+1. **Use the venv kernel, not the default `python3` kernel.** `jupyter` on
+   `PATH` is the *system* install (`/usr/local/bin`), whose `python3` kernel does
+   **not** have `bionemo`, `seaborn`, etc. The Evo2 stack lives in the venv
+   (`/workspace/.venv`), which already ships `ipykernel` + `nbconvert`. Register a
+   venv kernel once and target it:
+
+   ```bash
+   /workspace/.venv/bin/python -m ipykernel install --user --name evo2venv
+   ```
+
+   Symptom if you skip this: `ModuleNotFoundError: No module named 'seaborn'`
+   (or `bionemo`) even though `python -c "import seaborn"` works in the shell.
+
+2. **Strip the shipped cell outputs first.** The notebooks ship with at least one
+   stream output missing the required `name` field, which makes `nbconvert`
+   abort with `NotebookValidationError: 'name' is a required property` before it
+   even runs. Clear outputs via raw JSON, then execute:
+
+   ```python
+   import json
+   nb = json.load(open("nb.ipynb"))
+   for c in nb["cells"]:
+       if c["cell_type"] == "code":
+           c["outputs"] = []; c["execution_count"] = None
+   json.dump(nb, open("nb.ipynb", "w"))
+   ```
+
+We ran each notebook from a copy under `/data` (so downloads/outputs persist and
+the repo tree stays clean):
+
+```bash
+cd /data && /workspace/.venv/bin/python -m jupyter nbconvert \
+  --to notebook --execute --inplace \
+  --ExecutePreprocessor.kernel_name=evo2venv \
+  --ExecutePreprocessor.timeout=5400 \
+  <notebook>.ipynb
+```
+
+### zeroshot_brca1.ipynb — zero-shot BRCA1 variant effect prediction (1B)
+
+Self-contained: it `wget`s the BRCA1 supplementary table + chr17 genome from
+ARC's GitHub, downloads & converts the 1B checkpoint to
+`evo2_1b_base_mbridge/` (≈2.1 GB) if absent, builds reference/variant FASTAs,
+runs `predict_evo2 --use-subquadratic-ops`, and computes an AUROC.
+
+Verified: completed end-to-end (`NBEXIT=0`) on 1× H200 in ~3–4 min after the
+kernel fixes above. Artifacts under `/data/brca1*/`, predictions in
+`reference_predictions/` and `variant_predictions/`. Headline result:
+
+```
+Zero-shot prediction AUROC: 0.74
+```
+
+This is the expected ballpark for the **1B** model (the 7B/40B checkpoints reach
+~0.87–0.88 in the README's AUC table).
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.
