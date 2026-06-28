@@ -512,6 +512,36 @@ Zero-shot prediction AUROC: 0.74
 This is the expected ballpark for the **1B** model (the 7B/40B checkpoints reach
 ~0.87–0.88 in the README's AUC table).
 
+### fine-tuning-tutorial.ipynb — fine-tune the 1B on human chromosomes
+
+Full data→train pipeline: `wget`s hg38 chr20/chr21/chr22, concatenates them,
+runs `preprocess_evo2` (→ `/data/preprocessed_data`), downloads & converts the
+`evo2/1b-8k:1.0` checkpoint to `evo2_1b_fp8_mbridge/` (≈2.1 GB), then fine-tunes
+with `train_evo2 --finetune-ckpt-dir`. Set `FAST_CI_MODE=1` to use a 4-layer
+subset and `MAX_STEPS=10` so it finishes quickly:
+
+```bash
+cd /data && FAST_CI_MODE=1 /workspace/.venv/bin/python -m jupyter nbconvert \
+  --to notebook --execute --inplace \
+  --ExecutePreprocessor.kernel_name=evo2venv \
+  --ExecutePreprocessor.timeout=7200 \
+  fine-tuning-tutorial.ipynb
+```
+
+Verified: completed end-to-end (`NBEXIT=0`) on 8× H200. Evidence:
+
+- Preprocessing wrote train/val/test `.bin`/`.idx` to `/data/preprocessed_data`
+  (the val `.bin` alone is ~123 MB — these are real human chromosomes).
+- The notebook auto-derives `num_gpus=8` and trains with
+  `--context-parallel-size 8` at `--seq-length 8192`.
+- Saved checkpoints at iteration 5 and 10
+  (`/data/pretraining_demo/evo2/checkpoints/iter_0000010`); `progress.txt`
+  records `# GPUs: 8 ... Iteration: 10 ... Saved checkpoint`.
+
+Same headless-notebook setup as above (venv kernel + output strip). With
+`FAST_CI_MODE=1` the whole notebook runs in roughly the download +
+preprocess time (preprocessing the three chromosomes dominates wall-clock).
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.

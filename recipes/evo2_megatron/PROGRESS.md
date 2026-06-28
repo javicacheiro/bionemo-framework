@@ -54,7 +54,7 @@ _Last updated: 2026-06-28_
 | # | Example | README ref | Status | Notes |
 |---|---------|-----------|--------|-------|
 | 13 | `zeroshot_brca1.ipynb` — zero-shot BRCA1 VEP (1B) | Examples | ✅ | End-to-end `NBEXIT=0`; **AUROC 0.74**. Needs venv kernel + output-strip (see runbook) |
-| 14 | `fine-tuning-tutorial.ipynb` — fine-tune 1B on human chromosomes | Examples | ⬜ | Includes `preprocess_evo2` workflow |
+| 14 | `fine-tuning-tutorial.ipynb` — fine-tune 1B on human chromosomes | Examples | ✅ | `FAST_CI_MODE=1` end-to-end `NBEXIT=0` on 8× H200 (chr20/21/22 → preprocess → convert → train, iter_0000010) |
 | 15 | `lora-fine-tuning-tutorial.ipynb` — LoRA splice-site classification | Examples | ⬜ | Head-only baseline comparison |
 
 ## Build
