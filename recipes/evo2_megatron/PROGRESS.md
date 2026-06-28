@@ -55,7 +55,7 @@ _Last updated: 2026-06-28_
 |---|---------|-----------|--------|-------|
 | 13 | `zeroshot_brca1.ipynb` — zero-shot BRCA1 VEP (1B) | Examples | ✅ | End-to-end `NBEXIT=0`; **AUROC 0.74**. Needs venv kernel + output-strip (see runbook) |
 | 14 | `fine-tuning-tutorial.ipynb` — fine-tune 1B on human chromosomes | Examples | ✅ | `FAST_CI_MODE=1` end-to-end `NBEXIT=0` on 8× H200 (chr20/21/22 → preprocess → convert → train, iter_0000010) |
-| 15 | `lora-fine-tuning-tutorial.ipynb` — LoRA splice-site classification | Examples | ⬜ | Head-only baseline comparison |
+| 15 | `lora-fine-tuning-tutorial.ipynb` — LoRA splice-site classification | Examples | ✅ | `FAST_CI_MODE=1` `NBEXIT=0` (baseline 0.33% params / LoRA 1.42%). **Run single-GPU** — 8-GPU FAST_CI hits ZeroDivisionError (see runbook) |
 
 ## Build
 
@@ -63,11 +63,25 @@ _Last updated: 2026-06-28_
 |---|---------|-----------|--------|-------|
 | 16 | Docker build (`docker build`) | Docker build | ✅ | Image `evo2:20260628` already built and in use |
 
-## Suggested next steps
+## Status summary
 
-1. **Example 3** (`predict_evo2`) and **example 11** (Vortex export) — both reuse
-   the existing 1B checkpoint, no new downloads.
-2. **Example 6** (`evo2_remove_optimizer`) — run against the training checkpoint
-   produced by example 1 (`tmpfp8`).
-3. **Example 7** (fine-tune from NeMo2) and **example 13** (`zeroshot_brca1.ipynb`)
-   — both reuse the converted 1B checkpoint.
+All 16 examples have been exercised: **14 fully verified (✅)** and **2 partial
+(🟡)**. The only outstanding issue is a recipe bug:
+
+- **Example 8 / 12 (Savanna→MBridge):** `evo2_convert_savanna_to_mbridge` fails
+  out of the box on PyTorch 2.6 because `load_savanna_state_dict` uses
+  `torch.load(weights_only=True)` against a checkpoint that pickles numpy
+  objects. Verified this is the only blocker (works with `weights_only=False`).
+  **Action:** fix `load_savanna_state_dict` to allowlist the numpy globals (or
+  load ARC's trusted checkpoint with `weights_only=False`); then re-verify
+  examples 8 and 12 as ✅.
+
+Other notes captured during the run (see `running_evo2_in_aws.md` for details):
+
+- LoRA training (`train_evo2 --lora-finetune`) needs
+  `--disable-tensorboard-logger` (frozen-param `main_grad` crash) and explicit
+  `--decay-steps`/`--warmup-steps` for short runs.
+- Notebooks must run with a **venv ipykernel** (system `python3` kernel lacks
+  `bionemo`/`seaborn`) and need their shipped outputs stripped before nbconvert.
+- The LoRA classifier notebook's `FAST_CI_MODE` smoke test must run on a **single
+  GPU**.

@@ -542,6 +542,48 @@ Same headless-notebook setup as above (venv kernel + output strip). With
 `FAST_CI_MODE=1` the whole notebook runs in roughly the download +
 preprocess time (preprocessing the three chromosomes dominates wall-clock).
 
+### lora-fine-tuning-tutorial.ipynb — LoRA splice-site classification
+
+Trains a splice-site classifier two ways via the bundled `evo2_classifier.py`:
+a head-only baseline and a LoRA+head run, then compares test accuracy and
+trainable-parameter counts. It pulls the `InstaDeepAI/nucleotide_transformer_
+downstream_tasks_revised` dataset from HF (`datasets` lib), writes
+`splice_{train,val,test}.jsonl`, and converts `evo2/1b-8k-bf16:1.0` to
+`evo2_1b_bf16_mbridge/`.
+
+This notebook needs **`evo2_classifier.py` alongside it** (its torchrun command
+runs `evo2_classifier.py`), so copy both into the working dir:
+
+```bash
+cp /workspace/bionemo/examples/lora-fine-tuning-tutorial.ipynb /data/
+cp /workspace/bionemo/examples/evo2_classifier.py /data/
+cd /data && CUDA_VISIBLE_DEVICES=0 FAST_CI_MODE=1 /workspace/.venv/bin/python -m jupyter nbconvert \
+  --to notebook --execute --inplace \
+  --ExecutePreprocessor.kernel_name=evo2venv \
+  --ExecutePreprocessor.timeout=7200 \
+  lora-fine-tuning-tutorial.ipynb
+```
+
+Verified: completed end-to-end (`NBEXIT=0`). `FAST_CI_MODE=1` runs 40 iters each
+on a 600/180/180 split. Results (these are **smoke-test** numbers — 40 iters on a
+3-class task is near chance, not a real benchmark):
+
+| Run               | Trainable params      | % of 1.1B | Test accuracy |
+| ----------------- | --------------------- | --------- | ------------- |
+| Head-only baseline| 3,697,923             | 0.33%     | 0.4833        |
+| LoRA + head       | 15,985,923 (12.3M LoRA)| 1.42%    | 0.3389        |
+
+The point demonstrated is the **trainable-parameter breakdown** (head-only vs
+head+LoRA on a frozen 1.1B backbone), not converged accuracy.
+
+> **Gotcha — run the FAST_CI smoke test on a single GPU.** The notebook
+> auto-detects `NUM_GPUS = torch.cuda.device_count()` (8 here). On 8 GPUs the
+> LoRA stage dies with `ZeroDivisionError: integer division or modulo by zero`
+> in the data sampler — the tiny `FAST_CI_MODE` split (600 train) can't be
+> sharded across 8 ranks. Forcing `CUDA_VISIBLE_DEVICES=0` (single GPU) runs both
+> stages cleanly. The full-scale (non-FAST_CI) config with its larger dataset is
+> the one intended for multi-GPU.
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.
