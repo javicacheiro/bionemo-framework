@@ -171,6 +171,45 @@ exits cleanly and writes `/data/evo2_1b_weights_only/iter_0000012` plus
   README's "roughly triples" because this run used
   `--use-precision-aware-optimizer`, which stores extra master-weight state).
 
+### Fine-tune from the converted NeMo2 checkpoint (train_evo2 --finetune-ckpt-dir)
+
+Fine-tune the converted 1B checkpoint on mock data. Point `--finetune-ckpt-dir`
+at the converted MBridge dir (the one containing `iter_0000001`). We used
+`bf16_mixed` to match how the checkpoint was converted, a small step count for a
+smoke test, and `--result-dir /data/...` so the output persists:
+
+```bash
+torchrun --nproc-per-node 2 --no-python \
+  train_evo2 \
+  --hf-tokenizer-model-path tokenizers/nucleotide_fast_tokenizer_512 \
+  --model-size evo2_1b_base --max-steps 8 --eval-interval 10 \
+  --eval-iters 2 --mock-data \
+  --micro-batch-size 8 --global-batch-size 16 --seq-length 1024 \
+  --tensor-model-parallel 1 \
+  --use-precision-aware-optimizer --dataset-seed 33 \
+  --seed 41 \
+  --cross-entropy-loss-fusion \
+  --align-param-gather --overlap-param-gather --grad-reduce-in-fp32 \
+  --decay-steps 100 --warmup-steps 10 \
+  --mixed-precision-recipe bf16_mixed \
+  --no-fp32-residual-connection --activation-checkpoint-recompute-num-layers 1 \
+  --attention-dropout 0.001 --hidden-dropout 0.001 \
+  --eod-pad-in-loss-mask --enable-preemption \
+  --log-interval 2 \
+  --result-dir /data/ft_nemo2 --no-renormalize-loss \
+  --finetune-ckpt-dir /data/evo2_1b_mbridge
+```
+
+Success = it exits cleanly, saves a checkpoint, and runs validation. Verified:
+
+- Trained 8 iterations (~0.31 s/step, ~178 TFLOP/s/GPU) and wrote
+  `/data/ft_nemo2/evo2/checkpoints/iter_0000008`.
+- The saved `run_config.yaml` records `finetune: true` and
+  `pretrained_checkpoint: /data/evo2_1b_mbridge`, confirming weights were loaded
+  from the converted checkpoint rather than randomly initialised.
+- Validation/test `lm loss` ≈ 11.1 — meaningless on **mock** random data; this
+  example checks the fine-tuning *pipeline*, not convergence.
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.
