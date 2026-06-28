@@ -38,7 +38,7 @@ _Last updated: 2026-06-28_
 | # | Example | README ref | Status | Notes |
 |---|---------|-----------|--------|-------|
 | 7 | Fine-tune from NeMo2 ckpt (`train_evo2 --finetune-ckpt-dir`) | Fine-tuning → NeMo2 | ✅ | 8-step mock fine-tune from `/data/evo2_1b_mbridge` → `/data/ft_nemo2`; `finetune: true` in run_config |
-| 8 | Convert Savanna → MBridge (`evo2_convert_savanna_to_mbridge`) | Fine-tuning → Savanna | 🟡 | **Fails as written** (PT2.6 `weights_only=True` vs numpy globals). Verified the only blocker — works with `weights_only=False`; produced `/data/mbridge_1b_savanna`. Needs recipe fix (see runbook) |
+| 8 | Convert Savanna → MBridge (`evo2_convert_savanna_to_mbridge`) | Fine-tuning → Savanna | ✅ | Fixed PT2.6 `weights_only` load (fallback + regression test); CLI verified end-to-end → `/data/mbridge_1b_savanna_fixed` (254 keys) |
 | 9 | LoRA fine-tuning (`train_evo2 --lora-finetune`) | LoRA Fine-tuning | ✅ | 8-step adapter-only ckpt (149 MB) → `/data/lora_run`. Needs `--decay-steps/--warmup-steps` + `--disable-tensorboard-logger` (see runbook gotchas) |
 | 10 | Inference on a LoRA checkpoint (`infer_evo2` / `predict_evo2`) | LoRA → Running inference | ✅ | Both auto-reload base from `pretrained_checkpoint`; log-probs match base 1B |
 
@@ -47,7 +47,7 @@ _Last updated: 2026-06-28_
 | # | Example | README ref | Status | Notes |
 |---|---------|-----------|--------|-------|
 | 11 | Export MBridge → Vortex (`evo2_export_mbridge_to_vortex`) | Exporting to Vortex | ✅ | `/data/evo2_1b_vortex.pt` (~2.2 GB, 270 tensors) + `config.json`; CPU-only |
-| 12 | Savanna → MBridge → Vortex round-trip | Exporting to Vortex | 🟡 | Step 2 (Vortex export) verified → `/data/evo2_1b_savanna_vortex.pt` (~2.2 GB). Step 1 inherits the example-8 `weights_only` caveat |
+| 12 | Savanna → MBridge → Vortex round-trip | Exporting to Vortex | ✅ | Full chain verified (step 1 fixed per example 8) → `/data/evo2_1b_savanna_vortex.pt` (~2.2 GB) |
 
 ## Notebooks (`examples/`)
 
@@ -65,16 +65,18 @@ _Last updated: 2026-06-28_
 
 ## Status summary
 
-All 16 examples have been exercised: **14 fully verified (✅)** and **2 partial
-(🟡)**. The only outstanding issue is a recipe bug:
+**All 16 examples are fully verified (✅).**
 
-- **Example 8 / 12 (Savanna→MBridge):** `evo2_convert_savanna_to_mbridge` fails
-  out of the box on PyTorch 2.6 because `load_savanna_state_dict` uses
+The one recipe bug found during the run has been fixed:
+
+- **Example 8 / 12 (Savanna→MBridge):** `evo2_convert_savanna_to_mbridge` failed
+  out of the box on PyTorch 2.6 because `load_savanna_state_dict` used
   `torch.load(weights_only=True)` against a checkpoint that pickles numpy
-  objects. Verified this is the only blocker (works with `weights_only=False`).
-  **Action:** fix `load_savanna_state_dict` to allowlist the numpy globals (or
-  load ARC's trusted checkpoint with `weights_only=False`); then re-verify
-  examples 8 and 12 as ✅.
+  objects. **Fixed** by falling back to `weights_only=False` (ARC checkpoint is a
+  trusted source) when the strict load raises `UnpicklingError`, with a
+  regression test in
+  `tests/bionemo/evo2/utils/checkpoint/test_savanna_to_mbridge.py`. CLI re-verified
+  end-to-end; examples 8 and 12 now pass.
 
 Other notes captured during the run (see `running_evo2_in_aws.md` for details):
 

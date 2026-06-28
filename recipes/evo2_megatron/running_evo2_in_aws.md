@@ -386,7 +386,7 @@ introns removed) — matching the value we computed independently. CPU-only.
    `exon_number "1"`. An unquoted value (`exon_number 1;`) raises
    `IndexError: list index out of range` in `parse_gtf_attributes`.
 
-### Convert Savanna → MBridge (evo2_convert_savanna_to_mbridge) — ⚠ needs a fix
+### Convert Savanna → MBridge (evo2_convert_savanna_to_mbridge)
 
 Convert ARC's HuggingFace Savanna checkpoint to MBridge:
 
@@ -398,43 +398,30 @@ evo2_convert_savanna_to_mbridge \
   --tokenizer-path tokenizers/nucleotide_fast_tokenizer_256
 ```
 
-**As written this FAILS** on this image (PyTorch 2.6). The HF download succeeds
-(unauthenticated is fine; ~3.5 GB into `~/.cache/huggingface`), but loading the
-`.pt` dies with:
-
-```
-_pickle.UnpicklingError: Weights only load failed.
-  WeightsUnpickler error: Unsupported global: GLOBAL numpy.core.multiarray._reconstruct ...
-```
-
-Root cause: `load_savanna_state_dict` in
-`src/bionemo/evo2/utils/checkpoint/savanna_to_mbridge.py` calls
-`torch.load(..., weights_only=True)`, but the Savanna checkpoint pickles numpy
-objects, which PyTorch 2.6 refuses under the new `weights_only=True` default.
-
-**Recommended fix (recipe code):** in `load_savanna_state_dict`, either
-allowlist the numpy globals
-(`torch.serialization.add_safe_globals([...])`) or load the ARC checkpoint with
-`weights_only=False` (acceptable since it is a trusted source).
-
-**Verification:** we confirmed this is the *only* blocker by forcing
-`weights_only=False` via a monkeypatch and re-running the same CLI. It then
-completed cleanly:
-
-```
-Converted 254 keys
-MBridge checkpoint saved to /data/mbridge_1b_savanna   # contains iter_0000001
-```
-
-(There is also a benign `Unmapped savanna keys (54): ...` warning for
+The HF download succeeds (unauthenticated is fine; ~3.5 GB into
+`~/.cache/huggingface`). Verified end-to-end: `Converted 254 keys` →
+`MBridge checkpoint saved to /data/mbridge_1b_savanna` (contains `iter_0000001`).
+(There is a benign `Unmapped savanna keys (54): ...` warning for
 `*.outer_mlp_layernorm` / `*.post_attention_layernorm` / `*.rotary_emb.inv_freq`
 keys that the TE mapping does not consume.)
 
+> **History — fixed a PyTorch 2.6 incompatibility.** As originally shipped this
+> command failed on this image with
+> `_pickle.UnpicklingError: ... Unsupported global: GLOBAL numpy.core.multiarray._reconstruct`.
+> `load_savanna_state_dict` loaded the `.pt` with `torch.load(weights_only=True)`,
+> but Savanna checkpoints pickle numpy training metadata, which PyTorch ≥2.6
+> refuses under the new `weights_only=True` default. We fixed
+> `load_savanna_state_dict` to fall back to `weights_only=False` (ARC's published
+> checkpoint is a trusted source) when the strict load raises `UnpicklingError`,
+> with a regression test in
+> `tests/bionemo/evo2/utils/checkpoint/test_savanna_to_mbridge.py`. The command
+> above now works out of the box; the log shows a one-line warning when the
+> fallback triggers.
+
 ### Savanna → MBridge → Vortex round-trip
 
-Chains the two converters. Step 1 is the Savanna→MBridge conversion above (so it
-inherits the same `weights_only` caveat). Step 2 is the Vortex export, which works
-unchanged:
+Chains the two converters. Step 1 is the Savanna→MBridge conversion above; step 2
+is the Vortex export:
 
 ```bash
 # Step 2: MBridge -> Vortex (using the checkpoint produced above)
@@ -445,9 +432,8 @@ evo2_export_mbridge_to_vortex \
 ```
 
 Verified: `Loaded 254 keys` → `Converted to 270 vortex keys` →
-`/data/evo2_1b_savanna_vortex.pt` (~2.2 GB) + `config.json`. So the full
-Savanna→MBridge→Vortex chain is functional once the step-1 `weights_only` issue
-is addressed.
+`/data/evo2_1b_savanna_vortex.pt` (~2.2 GB) + `config.json`. The full
+Savanna→MBridge→Vortex chain is functional.
 
 ## Example notebooks (Jupyter)
 

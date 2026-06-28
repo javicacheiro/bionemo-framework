@@ -23,6 +23,7 @@ import argparse
 import json
 import logging
 import os
+import pickle
 from pathlib import Path
 
 import huggingface_hub.errors
@@ -135,7 +136,19 @@ def load_savanna_state_dict(path: Path) -> dict[str, torch.Tensor]:
     Returns:
         Flat state dict with keys like 'sequential.{i}.xxx'.
     """
-    raw = torch.load(str(path), map_location="cpu", weights_only=True, mmap=True)
+    try:
+        raw = torch.load(str(path), map_location="cpu", weights_only=True, mmap=True)
+    except pickle.UnpicklingError:
+        # Savanna checkpoints pickle non-tensor objects (e.g. numpy training
+        # metadata), which PyTorch >=2.6 rejects under the default
+        # weights_only=True. Fall back to a full unpickle; ARC's published .pt
+        # checkpoints are a trusted source.
+        logger.warning(
+            f"weights_only=True load failed for {path}; the checkpoint contains "
+            "non-tensor pickled objects. Retrying with weights_only=False "
+            "(trusted-source unpickle)."
+        )
+        raw = torch.load(str(path), map_location="cpu", weights_only=False, mmap=True)
     if "module" in raw:
         raw = raw["module"]
 
