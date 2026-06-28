@@ -260,6 +260,45 @@ checkpoint. Verified result:
    logging, so disabling the tensorboard logger entirely is the workaround.
    (Standard non-LoRA training is unaffected because all params are trainable.)
 
+### Inference on a LoRA checkpoint (infer_evo2 / predict_evo2)
+
+A LoRA checkpoint stores only adapter tensors; `infer_evo2` / `predict_evo2`
+detect the `peft` section in `run_config.yaml`, reload the dense base model from
+the recorded `pretrained_checkpoint`, graft the adapters, then load the adapter
+tensors. Point `--ckpt-dir` at the LoRA `iter_*` directory.
+
+```bash
+# Autoregressive generation on the LoRA checkpoint
+torchrun --nproc_per_node 1 --no-python \
+  infer_evo2 \
+  --ckpt-dir /data/lora_run/evo2/checkpoints/iter_0000008 \
+  --prompt "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG" \
+  --max-new-tokens 10 --temperature 1.0 --top-k 1 \
+  --output-file /data/lora_generated.jsonl
+
+# Batch scoring on the LoRA checkpoint
+torchrun --nproc_per_node 1 --no-python \
+  predict_evo2 \
+  --fasta /data/test_seqs.fasta \
+  --ckpt-dir /data/lora_run/evo2/checkpoints/iter_0000008 \
+  --output-dir /data/lora_predictions \
+  --micro-batch-size 1 --write-interval epoch \
+  --output-log-prob-seqs --log-prob-collapse-option mean
+```
+
+Success = both exit cleanly and reload the base model automatically. Verified:
+
+- `infer_evo2` logs `PEFT checkpoint detected. Loading base weights from:
+  /data/evo2_1b_mbridge/iter_0000001` → `Applying PEFT adapter structure` and
+  writes a valid greedy continuation to `/data/lora_generated.jsonl`.
+- `predict_evo2` logs `Loading adapter weights from: .../iter_0000008` and writes
+  `/data/lora_predictions/...pt`. Its mean log-probs
+  (`[-0.3063, -0.5971, -0.3118]`) are essentially identical to the base 1B model's
+  (`[-0.3077, -0.5972, -0.3130]`), as expected after only 8 mock-data steps — a
+  good sanity check that the base+adapter load path is correct.
+- The base checkpoint at `pretrained_checkpoint` must still exist on disk; it does
+  (`/data/evo2_1b_mbridge`).
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.

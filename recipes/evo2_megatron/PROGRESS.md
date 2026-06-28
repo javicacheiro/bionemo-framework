@@ -40,7 +40,7 @@ _Last updated: 2026-06-28_
 | 7 | Fine-tune from NeMo2 ckpt (`train_evo2 --finetune-ckpt-dir`) | Fine-tuning → NeMo2 | ✅ | 8-step mock fine-tune from `/data/evo2_1b_mbridge` → `/data/ft_nemo2`; `finetune: true` in run_config |
 | 8 | Convert Savanna → MBridge (`evo2_convert_savanna_to_mbridge`) | Fine-tuning → Savanna | ⬜ | Pulls `arcinstitute/savanna_evo2_1b_base` from HF |
 | 9 | LoRA fine-tuning (`train_evo2 --lora-finetune`) | LoRA Fine-tuning | ✅ | 8-step adapter-only ckpt (149 MB) → `/data/lora_run`. Needs `--decay-steps/--warmup-steps` + `--disable-tensorboard-logger` (see runbook gotchas) |
-| 10 | Inference on a LoRA checkpoint (`infer_evo2` / `predict_evo2`) | LoRA → Running inference | ⬜ | Depends on example 9 |
+| 10 | Inference on a LoRA checkpoint (`infer_evo2` / `predict_evo2`) | LoRA → Running inference | ✅ | Both auto-reload base from `pretrained_checkpoint`; log-probs match base 1B |
 
 ## Export
 
