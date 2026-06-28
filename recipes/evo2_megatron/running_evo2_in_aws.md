@@ -127,6 +127,28 @@ Three finite, negative mean log-probs — one per input sequence — confirm the
 scoring path works. Skipped `--use-subquadratic-ops` for this small smoke test
 (it only pays off on larger datasets due to the one-time kernel compile).
 
+### Export to Vortex format (evo2_export_mbridge_to_vortex)
+
+Convert the 1B MBridge checkpoint into ARC's single-file Vortex `.pt` format.
+This is a CPU-only conversion (no `torchrun`/GPU needed):
+
+```bash
+evo2_export_mbridge_to_vortex \
+  --mbridge-ckpt-dir /data/evo2_1b_mbridge/iter_0000001 \
+  --output-path /data/evo2_1b_vortex.pt \
+  --model-size evo2_1b_base
+```
+
+Success = it exits cleanly and writes `/data/evo2_1b_vortex.pt` plus a sibling
+`/data/config.json`. Verified result:
+
+- Logs: `Loaded 254 keys` → `Converted to 270 vortex keys` →
+  `Saved vortex checkpoint`.
+- `evo2_1b_vortex.pt` is ~2.2 GB and loads with `torch.load(..., weights_only=True)`
+  into a 270-tensor state dict with Vortex-style keys, e.g.
+  `embedding_layer.weight` (shape `(512, 1920)`, `bfloat16`), `unembed.weight`,
+  `blocks.0.pre_norm.scale`.
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.

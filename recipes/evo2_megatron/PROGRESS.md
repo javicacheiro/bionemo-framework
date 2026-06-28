@@ -46,7 +46,7 @@ _Last updated: 2026-06-28_
 
 | # | Example | README ref | Status | Notes |
 |---|---------|-----------|--------|-------|
-| 11 | Export MBridge → Vortex (`evo2_export_mbridge_to_vortex`) | Exporting to Vortex | ⬜ | Reuse converted 1B checkpoint |
+| 11 | Export MBridge → Vortex (`evo2_export_mbridge_to_vortex`) | Exporting to Vortex | ✅ | `/data/evo2_1b_vortex.pt` (~2.2 GB, 270 tensors) + `config.json`; CPU-only |
 | 12 | Savanna → MBridge → Vortex round-trip | Exporting to Vortex | ⬜ | Depends on example 8 |
 
 ## Notebooks (`examples/`)
