@@ -31,7 +31,7 @@ _Last updated: 2026-06-28_
 
 | # | Example | README ref | Status | Notes |
 |---|---------|-----------|--------|-------|
-| 6 | Remove optimizer state (`evo2_remove_optimizer`) | Removing optimizer state | ⬜ | Needs a training checkpoint with optimizer state (from example 1) |
+| 6 | Remove optimizer state (`evo2_remove_optimizer`) | Removing optimizer state | ✅ | tmpfp8 iter_0000012: 16 GB → 2.3 GB → `/data/evo2_1b_weights_only`; CPU-only |
 
 ## Fine-tuning
 

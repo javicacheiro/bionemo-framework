@@ -149,6 +149,28 @@ Success = it exits cleanly and writes `/data/evo2_1b_vortex.pt` plus a sibling
   `embedding_layer.weight` (shape `(512, 1920)`, `bfloat16`), `unembed.weight`,
   `blocks.0.pre_norm.scale`.
 
+### Strip optimizer state from a checkpoint (evo2_remove_optimizer)
+
+The mock-data training run above (`--result-dir tmpfp8`) writes full training
+checkpoints under `/workspace/bionemo/tmpfp8/evo2/checkpoints/` (these live
+inside the container, not in `/data`). Strip the optimizer state to produce a
+small weights-only checkpoint in `/data` so it persists:
+
+```bash
+evo2_remove_optimizer \
+  --src-ckpt-dir /workspace/bionemo/tmpfp8/evo2/checkpoints \
+  --dst-ckpt-dir /data/evo2_1b_weights_only
+```
+
+The tool auto-selects the latest `iter_*` (here `iter_0000012`). Success = it
+exits cleanly and writes `/data/evo2_1b_weights_only/iter_0000012` plus
+`latest_checkpointed_iteration.txt` / `latest_train_state.pt`. Verified result:
+
+- Logs: `Loading 258 model-weight keys (skipping 112 optimizer/other keys)`.
+- Size dropped from **16 GB → 2.3 GB** for the iter dir (~7×; larger than the
+  README's "roughly triples" because this run used
+  `--use-precision-aware-optimizer`, which stores extra master-weight state).
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.
