@@ -386,6 +386,69 @@ introns removed) — matching the value we computed independently. CPU-only.
    `exon_number "1"`. An unquoted value (`exon_number 1;`) raises
    `IndexError: list index out of range` in `parse_gtf_attributes`.
 
+### Convert Savanna → MBridge (evo2_convert_savanna_to_mbridge) — ⚠ needs a fix
+
+Convert ARC's HuggingFace Savanna checkpoint to MBridge:
+
+```bash
+evo2_convert_savanna_to_mbridge \
+  --savanna-ckpt-path arcinstitute/savanna_evo2_1b_base \
+  --mbridge-ckpt-dir /data/mbridge_1b_savanna \
+  --model-size evo2_1b_base \
+  --tokenizer-path tokenizers/nucleotide_fast_tokenizer_256
+```
+
+**As written this FAILS** on this image (PyTorch 2.6). The HF download succeeds
+(unauthenticated is fine; ~3.5 GB into `~/.cache/huggingface`), but loading the
+`.pt` dies with:
+
+```
+_pickle.UnpicklingError: Weights only load failed.
+  WeightsUnpickler error: Unsupported global: GLOBAL numpy.core.multiarray._reconstruct ...
+```
+
+Root cause: `load_savanna_state_dict` in
+`src/bionemo/evo2/utils/checkpoint/savanna_to_mbridge.py` calls
+`torch.load(..., weights_only=True)`, but the Savanna checkpoint pickles numpy
+objects, which PyTorch 2.6 refuses under the new `weights_only=True` default.
+
+**Recommended fix (recipe code):** in `load_savanna_state_dict`, either
+allowlist the numpy globals
+(`torch.serialization.add_safe_globals([...])`) or load the ARC checkpoint with
+`weights_only=False` (acceptable since it is a trusted source).
+
+**Verification:** we confirmed this is the *only* blocker by forcing
+`weights_only=False` via a monkeypatch and re-running the same CLI. It then
+completed cleanly:
+
+```
+Converted 254 keys
+MBridge checkpoint saved to /data/mbridge_1b_savanna   # contains iter_0000001
+```
+
+(There is also a benign `Unmapped savanna keys (54): ...` warning for
+`*.outer_mlp_layernorm` / `*.post_attention_layernorm` / `*.rotary_emb.inv_freq`
+keys that the TE mapping does not consume.)
+
+### Savanna → MBridge → Vortex round-trip
+
+Chains the two converters. Step 1 is the Savanna→MBridge conversion above (so it
+inherits the same `weights_only` caveat). Step 2 is the Vortex export, which works
+unchanged:
+
+```bash
+# Step 2: MBridge -> Vortex (using the checkpoint produced above)
+evo2_export_mbridge_to_vortex \
+  --mbridge-ckpt-dir /data/mbridge_1b_savanna/iter_0000001 \
+  --output-path /data/evo2_1b_savanna_vortex.pt \
+  --model-size evo2_1b_base
+```
+
+Verified: `Loaded 254 keys` → `Converted to 270 vortex keys` →
+`/data/evo2_1b_savanna_vortex.pt` (~2.2 GB) + `config.json`. So the full
+Savanna→MBridge→Vortex chain is functional once the step-1 `weights_only` issue
+is addressed.
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.
