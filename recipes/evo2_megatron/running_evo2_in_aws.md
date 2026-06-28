@@ -210,6 +210,56 @@ Success = it exits cleanly, saves a checkpoint, and runs validation. Verified:
 - Validation/test `lm loss` ≈ 11.1 — meaningless on **mock** random data; this
   example checks the fine-tuning *pipeline*, not convergence.
 
+### LoRA fine-tuning (train_evo2 --lora-finetune)
+
+LoRA fine-tune the converted 1B checkpoint on mock data. Two adjustments were
+needed versus the README snippet — see the gotchas below:
+
+```bash
+torchrun --nproc-per-node 2 --no-python \
+  train_evo2 \
+  --hf-tokenizer-model-path tokenizers/nucleotide_fast_tokenizer_512 \
+  --model-size evo2_1b_base --max-steps 8 --eval-interval 10 \
+  --eval-iters 2 --mock-data \
+  --micro-batch-size 4 --global-batch-size 8 --seq-length 1024 \
+  --mixed-precision-recipe bf16_mixed \
+  --decay-steps 100 --warmup-steps 10 \
+  --log-interval 2 --disable-tensorboard-logger \
+  --result-dir /data/lora_run \
+  --finetune-ckpt-dir /data/evo2_1b_mbridge \
+  --lora-finetune --lora-dim 16 --lora-alpha 32 --lora-dropout 0.1 \
+  --lora-target-modules "dense_projection,linear_qkv,linear_proj,linear_fc1,linear_fc2"
+```
+
+Success = it exits 0, grafts LoRA adapters, trains, and saves an adapter-only
+checkpoint. Verified result:
+
+- Logs `Adding lora to: decoder.layers.N....` for the targeted modules and
+  `[Evo2LoRA+Recompute] Patched HyenaStack.forward ...`.
+- Trained 8 iterations and saved `/data/lora_run/evo2/checkpoints/iter_0000008`,
+  which is only **149 MB** (adapters only — the base weights are not duplicated).
+- `run_config.yaml` contains a `peft:` section
+  (`_target_: bionemo.evo2.models.evo2_lora.Evo2LoRA`) plus
+  `pretrained_checkpoint: /data/evo2_1b_mbridge` — this is what `infer_evo2` /
+  `predict_evo2` use to reload the base model (see example 10).
+
+**Two gotchas (both needed to make the README snippet run as a short smoke test):**
+
+1. **`--decay-steps` / `--warmup-steps` are required for short runs.** Without
+   them the job dies early with
+   `ValueError: lr_decay_steps must be > 0, got -39936`. The README LoRA snippet
+   omits them but uses `--max-steps 500`; for a small step count you must pass
+   them explicitly (we used `--decay-steps 100 --warmup-steps 10`).
+2. **`--disable-tensorboard-logger` is required for LoRA.** With tensorboard
+   logging enabled, at the first tensorboard log interval the run crashes with
+   `AttributeError: 'Parameter' object has no attribute 'main_grad'` inside
+   megatron-bridge's `report_l2_norm_grad`. The Evo2 recipe hard-codes
+   `log_l2_norm_grad_to_tensorboard=True` (`recipes/evo2.py`), and that code path
+   touches `.main_grad` on the **frozen** LoRA base parameters, which never get a
+   grad buffer. There is no dedicated CLI flag to disable only the l2-norm
+   logging, so disabling the tensorboard logger entirely is the workaround.
+   (Standard non-LoRA training is unaffected because all params are trainable.)
+
 ## Notes
 
 - `--temperature 1.0` is required (MCore rejects 0); `--top-k 1` gives greedy decoding.
