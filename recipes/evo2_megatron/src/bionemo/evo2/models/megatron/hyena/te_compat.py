@@ -52,15 +52,44 @@ def set_format_recipe():
     return fp8_recipe
 
 
+def _unpad_seq(t, length):
+    """Unpad a sequence-first activation tensor back to ``length`` along dim 0.
+
+    Only multi-dimensional (sequence-first) tensors longer than ``length`` are sliced;
+    1-D tensors such as bias (shaped ``[out_features]``) and non-tensors pass through
+    untouched.
+    """
+    if torch.is_tensor(t) and t.dim() >= 2 and t.shape[0] > length:
+        return t[:length]
+    return t
+
+
 def fp8_padded_forward(cls, self, x):
-    """Forward call that ensures proper padding as required by TE layers."""
+    """Forward call that ensures proper padding as required by TE layers.
+
+    Pads the (sequence-first) input to a multiple of 8 for TE FP8, runs the wrapped forward
+    under fp8 autocast, then unpads any sequence-first output tensor(s) back to the original
+    length. The parent's return *structure* is passed through unchanged so callers relying on
+    the full Megatron return contract keep working -- in particular Megatron-Bridge LoRA, which
+    enables ``return_layernorm_output`` on the wrapped layer and expects one of ``(out, bias)`` /
+    ``((out, ln_out), bias)`` / ``(out, bias, ln_out)`` (see
+    ``megatron.bridge.peft.adapter_wrapper.base_linear_forward``). The previous implementation
+    hard-coded a ``(out, bias)`` unpack, which broke LoRA fine-tuning of the vortex-style-fp8
+    projection layers.
+    """
     L = x.shape[0]  # noqa: N806
-    x = pad_to_multiple(x)
+    x_padded = pad_to_multiple(x)
     with te.fp8_autocast(enabled=True, fp8_recipe=set_format_recipe()):
-        x, bias = cls.forward(x)
-    if x.shape[0] > L:
-        x = x[:L, :, :]
-    return x, bias
+        out = cls.forward(x_padded)
+    if x_padded.shape[0] == L:
+        # No padding was needed (e.g. seq length already a multiple of 8); return unchanged.
+        return out
+    if not isinstance(out, tuple):
+        return _unpad_seq(out, L)
+    return tuple(
+        tuple(_unpad_seq(e, L) for e in item) if isinstance(item, tuple) else _unpad_seq(item, L)
+        for item in out
+    )
 
 
 def rmsnorm(self, x):

@@ -704,6 +704,16 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Skip freeze modules for LoRA fine-tuning, as a comma-separated list.",
     )
 
+    parser.add_argument(
+        "--vortex-style-fp8",
+        action="store_true",
+        default=False,
+        help="Use vortex-style FP8 (applies FP8 only to projection layers). Required for "
+        "FP8/Hopper-sensitive checkpoints (e.g. the ARC Savanna 20b/40b) so the model runs "
+        "in the FP8 configuration it was trained with. Combine with "
+        "--mixed-precision-recipe bf16_mixed.",
+    )
+
     return parser.parse_args(args=args)
 
 
@@ -899,6 +909,11 @@ def train(args: argparse.Namespace) -> None:
             torch.cuda.set_device(get_local_rank_preinit())
         ensure_subquadratic_ops_supported()
         cfg.model.use_subquadratic_ops = True
+
+    # Configure vortex-style FP8 (applies FP8 only to projection layers). Mirrors predict.py /
+    # infer.py so FP8/Hopper-sensitive checkpoints can be (fine-)tuned in their native FP8 regime.
+    if args.vortex_style_fp8:
+        cfg.model.vortex_style_fp8 = True
 
     if args.no_activation_checkpointing:
         cfg.model.recompute_granularity = None

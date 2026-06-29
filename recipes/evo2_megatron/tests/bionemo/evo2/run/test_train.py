@@ -684,3 +684,41 @@ def test_lora_finetune_disables_l2_norm_grad_logging(monkeypatch):
     with pytest.raises(_StopBeforePretrain):
         train_module.train(train_module.parse_args(shlex.split(base)))
     assert captured["cfg"].logger.log_l2_norm_grad_to_tensorboard is True
+
+
+def test_vortex_style_fp8_sets_model_flag(monkeypatch):
+    """`--vortex-style-fp8` must set ``cfg.model.vortex_style_fp8 = True``.
+
+    This mirrors ``predict.py`` / ``infer.py`` so FP8/Hopper-sensitive checkpoints (e.g. the ARC
+    Savanna 20b/40b) can be (fine-)tuned in their native FP8 regime (FP8 only on the dense
+    projection layers). Captures the assembled config (monkeypatching ``pretrain`` so no training
+    launches) and checks the flag both on and off. CPU-only.
+    """
+    import bionemo.evo2.run.train as train_module
+
+    captured: Dict[str, object] = {}
+
+    class _StopBeforePretrain(Exception):
+        pass
+
+    def _capture_cfg(cfg, *args, **kwargs):
+        captured["cfg"] = cfg
+        raise _StopBeforePretrain
+
+    monkeypatch.setattr(train_module, "pretrain", _capture_cfg)
+
+    base = (
+        "--mock-data --model-size evo2_1b_base --max-steps 2 --warmup-steps 1 --decay-steps 2 "
+        "--eval-interval 2 --eval-iters 1 --global-batch-size 2 --micro-batch-size 1 --seq-length 64"
+    )
+
+    # Flag on -> model provider configured for vortex-style FP8.
+    with pytest.raises(_StopBeforePretrain):
+        train_module.train(train_module.parse_args(shlex.split(base + " --vortex-style-fp8")))
+    assert captured["cfg"].model.vortex_style_fp8 is True
+
+    # Flag off -> default preserved (vortex-style FP8 not enabled).
+    captured.clear()
+    with pytest.raises(_StopBeforePretrain):
+        train_module.train(train_module.parse_args(shlex.split(base)))
+    assert not captured["cfg"].model.vortex_style_fp8
