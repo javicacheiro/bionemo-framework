@@ -1,0 +1,18 @@
+# Ignore everything by default. This directory is a training handoff folded into
+# the recipe repo. Track the docs and small text artifacts; keep the large
+# data/metadata binaries out of the code repo's git history (they remain on disk
+# and in the original standalone handoff repo).
+*
+
+# Keep repository docs and small text artifacts only.
+!/.gitignore
+!/README.md
+!/LOG_evo2_7b_8k.md
+!/LOG_evo2_20b.md
+
+!/savanna/
+!/savanna/preprocess_commands.sh
+!/savanna/data_config_viral_lora.json
+
+# Intentionally NOT tracked here (large binaries; available on disk / handoff repo):
+#   data/train.jsonl.gz, data/valid.jsonl.gz, metadata/eukaryotic_host_core_manifest.tsv.gz
