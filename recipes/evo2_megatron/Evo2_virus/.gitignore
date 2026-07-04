@@ -11,6 +11,7 @@
 !/LOG_evo2_20b.md
 !/LOG_evo2_40b.md
 !/LOG_evo2_longer_3000steps.md
+!/LOG_evo2_context_ablation.md
 
 !/savanna/
 !/savanna/preprocess_commands.sh

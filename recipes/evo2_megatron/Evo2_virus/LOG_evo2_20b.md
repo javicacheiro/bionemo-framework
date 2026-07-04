@@ -14,7 +14,8 @@ with the `/data` bind-mount). The venv is on `PATH`; `BIONEMO_DATA_SOURCE=ngc`.
 
 > **Follow-up (`LOG_evo2_longer_3000steps.md`):** the 1000-step plateau below was a LR-schedule
 > artifact. A fresh 3000-step run (full cosine decay) improved this 20B to val PPL **2.754** and
-> base→LoRA **−17.5%**. See that log for the 20B-vs-40B longer-training comparison.
+> base→LoRA **−17.5%**. See that log for the 20B-vs-40B longer-training comparison, and
+> `LOG_evo2_context_ablation.md` for the 16k/32k/128k context sweep (context length gives no gain).
 
 What changes vs the 7B run:
 - Base checkpoint: `arcinstitute/savanna_evo2_20b` (HF Savanna) → convert with

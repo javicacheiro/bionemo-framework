@@ -5,6 +5,10 @@ steps at seq-16384** and appeared to plateau (20B val PPL 750→1000: 2.974→2.
 This log tests whether **more training** helps, and answers a "more steps vs longer context (1M)"
 question.
 
+> **See also `LOG_evo2_context_ablation.md`:** a direct 16k/32k/128k context sweep on the 20B
+> confirms the prediction below — longer *context* gives no benefit (32k ≈ 16k exactly; 128k no gain
+> even for large-genome dsDNA). Training *length* is the lever; context length is not.
+
 ## Why more steps, not 1M context
 
 The viral corpus is **short**, which rules out long-context training as a useful direction:
