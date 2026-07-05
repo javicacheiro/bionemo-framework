@@ -7,6 +7,8 @@
 # Keep repository docs and small text artifacts only.
 !/.gitignore
 !/README.md
+!/COMMANDS.sh
+!/CHANGES.md
 !/LOG_evo2_7b_8k.md
 !/LOG_evo2_20b.md
 !/LOG_evo2_40b.md
