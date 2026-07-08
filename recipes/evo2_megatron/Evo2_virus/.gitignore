@@ -21,3 +21,10 @@
 
 # Intentionally NOT tracked here (large binaries; available on disk / handoff repo):
 #   data/train.jsonl.gz, data/valid.jsonl.gz, metadata/eukaryotic_host_core_manifest.tsv.gz
+
+# Consolidated results doc + uncapped length-stratified scoring + its scripts
+!/RESULTS_SUMMARY.md
+!/RESULTS_uncapped_bylen.txt
+!/analysis/
+!/analysis/aggregate_ppl_bylen.py
+!/analysis/score_uncapped_v2.sh
