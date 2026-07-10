@@ -45,20 +45,36 @@ at ~1/2.6 the cost). Monotonic 1B < 7B < 20B ≈ 40B.
 
 ---
 
-## 2. Training-length ablation — seq-16384, 1000 → 3000 steps
+## 2. Training-length ablation — seq-16384, 1000 → 3000 → 9000 steps
 
-| model | val PPL @1000 | val PPL @3000 (end) | overall @1000 | overall @3000 |
+| model | val PPL @1000 | val PPL @3000 | overall @1000 | overall @3000 |
 |---|---:|---:|---:|---:|
 | 20B | 2.969 | **2.754** | −13.71% | **−17.48%** |
 | 40B | 2.976 | 2.767 | −13.51% | −17.20% |
 
-**Finding:** longer training is **the lever**. The apparent 1000-step "plateau" was an LR-schedule
-artifact (the `--decay-steps 1000` cosine had annealed to the 3e-5 floor). With a full 3000-step
-cosine both models keep improving well past 1000. **20B still edges 40B at 3000** (2.754 vs 2.767).
+**20B length ladder (end-of-train full-val / test PPL; the reliable numbers):**
 
-20B @3000 val-PPL trajectory (noisy): 250:3.085, 500:3.006, 750:2.941, 1000:2.924, 1250:2.895,
-1500:2.813, 1750:2.858, 2000:2.802, 2250:2.827, 2500:2.792, 2750:**2.768**, 3000:2.786, full-val:2.754.
-→ curve is near-floor but still gently descending by 2750; **not obviously converged**.
+| 20B @16k | steps | tokens | full-val | test | Δ full-val vs prev |
+|---|---:|---:|---:|---:|---:|
+| @1000 | 1000 | 0.26 B | 2.969 | — | — |
+| @3000 | 3000 | 0.79 B | 2.754 | 2.759 | **−0.215** |
+| **@9000** | 9000 | 2.36 B | **2.729** | **2.724** | **−0.025** |
+
+**Finding:** longer training is **the lever, with sharply diminishing returns**. The apparent
+1000-step "plateau" was an LR-schedule artifact (the `--decay-steps 1000` cosine had annealed to the
+3e-5 floor); with a full cosine the model keeps improving. But the marginal gain collapses: tripling
+1000→3000 bought −0.215, tripling again 3000→9000 bought only **−0.025** (~1 eval-noise unit) for ~16 h
+more compute. **No overfitting knee** (the 9000 low-LR tail iter 7000–9000 held ~2.69–2.74, below the
+3000 level), but we are at the **data-limited ceiling** of this ~86 M-token corpus (~27 epochs at 9000).
+**3000 steps captures ~90% of the achievable gain — the price/perf sweet spot; 9000 is marginally
+better only if compute is free.** 20B still edges 40B at 3000 (2.754 vs 2.767).
+
+The 9000 run reused the resume+extend path (`--workers 0`, `--decay-steps 9000` reshaping the cosine;
+resumed from `iter_0003000`). wandb `viral-lora-20b-seq16384-vfp8-9k`; ckpt `lora_run_20b_16k_9k`.
+
+> **Token-vs-context corroboration:** 16k@9000 (2.36 B tokens, full-val 2.729) **beats 32k@3000**
+> (1.57 B tokens, 2.755). Spending compute on more *tokens at 16k* beats more *context* — confirms
+> §3's verdict head-to-head: tokens/length is the lever, context is not.
 
 ---
 
@@ -147,6 +163,23 @@ Base column = vortex-FP8 base (3.578-overall runs). Rows sorted by 20B@3000 gain
 dsRNA is the clear outlier: high base PPL (3.736, hardest) *and* smallest LoRA gain. ssRNA(other) (n=64)
 is noisy.
 
+**16k length-ladder endpoint — 16k@9000 capped per-genome** (base 3.579; 1278/1348 = 94.8% improved;
+`RESULTS_16k9k_pergenome.txt`):
+
+| class | 16k@3000 | **16k@9000** |
+|---|---:|---:|
+| OVERALL | −17.48% | **−18.42%** |
+| ssDNA | −28.23% | −28.84% |
+| ssRNA(−) | −21.20% | −22.35% |
+| dsDNA | −18.69% | −19.22% |
+| ssRNA(+) | −13.41% | −14.46% |
+| ssRNA(other) | −10.75% | −12.99% |
+| dsRNA | −2.46% | −3.11% |
+
+3000→9000 improves every class modestly (~0.5–2 pp) — diminishing but positive, matching the val-PPL
+ladder in §2. dsRNA remains the persistent outlier (−3.11%) even with 3× the training → its weakness
+is not a training-length problem.
+
 ---
 
 ## 5. Engineering / feasibility (measured)
@@ -205,8 +238,10 @@ is noisy.
   N-pad bias. Low priority given the effect size.
 
 **B. Push the lever that works (training length)**
-- 20B @16k **beyond 3000** — the 3000 curve was still gently descending (2.768@2750). Does 4000–6000
-  keep helping, or is it converged? Cheap now that resume+extend works (`--workers 0`).
+- ✅ DONE: 20B @16k **to 9000 steps** — §2. Still helps but sharply diminishing (−0.025 for 3000→9000
+  vs −0.215 for 1000→3000); no overfitting; at the data-limited ceiling. **Training length is
+  effectively exhausted as a lever past ~3000 on this corpus** — further length is not the productive
+  direction; capacity/data/downstream (C–F below) are.
 
 **C. Adapter capacity (mostly untested)**
 - Only LoRA dim 16 tried. Sweep dim/alpha (e.g. 32/64) — does more capacity help the weak classes

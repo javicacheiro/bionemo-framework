@@ -28,3 +28,4 @@
 !/analysis/
 !/analysis/aggregate_ppl_bylen.py
 !/analysis/score_uncapped_v2.sh
+!/RESULTS_16k9k_pergenome.txt

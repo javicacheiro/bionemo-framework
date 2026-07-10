@@ -1,0 +1,13 @@
+records: base=1349 lora=1348 common=1348
+
+OVERALL mean PPL (n=1348): base=3.5790  lora=2.9199  delta=-0.6592  (-18.42%)
+
+genome class       n   base PPL   lora PPL    delta    rel%
+ssRNA(-)         353     3.6305     2.8193  -0.8113 -22.35%
+ssRNA(+)         337     3.5632     3.0481  -0.5151 -14.46%
+ssDNA            289     3.5879     2.5533  -1.0347 -28.84%
+dsRNA            179     3.7361     3.6199  -0.1162  -3.11%
+dsDNA            126     3.3248     2.6858  -0.6390 -19.22%
+ssRNA(other)      64     3.3999     2.9582  -0.4417 -12.99%
+
+records where LoRA logprob > base: 1278/1348 (94.8%)
