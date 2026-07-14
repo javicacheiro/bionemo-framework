@@ -140,9 +140,15 @@ Only orthogonal axis left = training length (Phase 7 ceiling test, running).
 Adapter-config frontier now fully mapped; peak ~−24.3%. Open project question: is that the DATA-limited
 ceiling, or does the best config keep improving with more steps (length gave +0.94pp for 3000→9000 at
 dim16 — does it still help at high capacity+regularization)?
-- **local (RUNNING): dim256 × α1024 × dropout 0.2 × 6000 steps** — the "how good can we get" run.
-  `lora_run_20b_16k_dim256_a1024_do2_6k`. Beats −24.33% → length still helps the best config; flat →
-  data-limited peak reached.
+- **local DONE: dim256 × α1024 × dropout 0.2 × 6000 steps → −24.96%** (NEW BEST mean), coverage 91.8%,
+  dsRNA **−9.78%** (best dsRNA by far). **Length is NOT exhausted at the best config**: 3000→6000 gave
+  +0.63pp mean and +1.97pp dsRNA — but coverage dropped 94.6→91.8% (**more training re-introduced the
+  overfit** that do0.2 had fixed at 3000 → more steps needs more regularization). `..._do2_6k`.
+- **local (RUNNING): dim256 × α1024 × dropout 0.3 × 6000 steps** — does more dropout recover the 6k
+  coverage loss while keeping the −24.96% mean → best of both? `lora_run_20b_16k_dim256_a1024_do3_6k`.
+
+**Revised peak:** best config × 6000 steps = **−24.96%** (mean) — length + capacity + α-scaling +
+regularization all stack. Coverage/mean trade-off at 6k is the open refinement (do0.3×6k, running).
 
 ### dsRNA root-cause (GPU-free analysis) — UNDER-REPRESENTATION
 Manifest covers 100% of train records. **dsRNA = 12.2% of records but only 2.45% of TOKENS**
