@@ -25,6 +25,7 @@
 
 # Consolidated results doc + uncapped length-stratified scoring + its scripts
 !/RESULTS_SUMMARY.md
+!/EXPLORATION_LOG.md
 !/RESULTS_uncapped_bylen.txt
 !/analysis/
 !/analysis/aggregate_ppl_bylen.py

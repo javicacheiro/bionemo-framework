@@ -182,6 +182,98 @@ is not a training-length problem.
 
 ---
 
+## 4b. Adapter capacity & LoRA-scaling — the strongest lever (20B @16k @3000)
+
+Resolves the §7-C "capacity mostly untested" thread. All runs 20B/16k/3000/vortex-FP8, capped
+per-genome vs the 3.579 base; two orthogonal knobs — **adapter capacity (dim)** and **LoRA scaling
+(α, i.e. α/dim magnitude)**.
+
+**Capacity sweep (α = 2·dim, i.e. ratio 2):**
+
+| dim | 8 | 16 | 32 | 64 | 128 | 256 |
+|---|---:|---:|---:|---:|---:|---:|
+| overall | −15.76% | −17.48% | −19.01% | −20.09% | −20.74% | −21.29% |
+| coverage | 96% | — | — | 95% | — | 87% |
+
+Monotonic, **log-linear, diminishing** (~+1.5 pp/doubling early → +0.6 pp late). **Coverage drops at
+dim256 (87%)** → high capacity helps the mean but overfits a minority. Robust sweet spot ~dim 64–128.
+
+**Target-module ablation (dim64, all-5 = −20.09%):** MLP-only (`linear_fc1/fc2`) **−19.72%** vs
+mixer/attn-only (`dense_projection,linear_qkv,linear_proj`) **−16.68%**. → **The MLP adapters carry
+almost all the benefit;** attn/mixer projections add only ~0.4 pp. Put capacity in the MLP.
+
+**LoRA-scaling (α/dim) ladder — the second, stackable lever:**
+
+| dim | α | ratio | overall | coverage | dsRNA |
+|---|---:|---:|---:|---:|---:|
+| 64 | 64 | 1 | −19.39% | — | — |
+| 64 | 128 | 2 | −20.09% | 95% | −4.02% |
+| 64 | 256 | 4 | −21.00% | — | — |
+| 128 | 512 | 4 | −22.20% | 92.5% | −5.83% |
+| **256** | **1024** | **4** | **−23.48%** | 91.0% | **−7.87%** |
+| **128** | **1024** | **8** | **−23.37%** | **93.9%** | −6.93% |
+| 128 | 2048 | 16 | **+4.97%** | 1.0% | — |
+| 256 | 2048 | 8 | **+2.77%** | 10.5% | — |
+
+**Findings:**
+1. **Capacity and scaling stack** — both raise effective adapter magnitude; combined they roughly
+   double the base −13.71% gain to **~−23.5%**.
+2. **α ≈ 1024 is a hard ceiling.** Both α=2048 runs **diverge into a bad basin** (worse than base,
+   no NaN) regardless of dim/ratio → it's *absolute α*, not the ratio, that breaks. Stay at **α ≤ 1024.**
+3. **Two co-winners at the peak (~−23.4–23.5%):** **dim256×α1024** (best mean + best dsRNA, but 91%
+   coverage) vs **dim128×α1024** (best robustness, 93.9% coverage). Pick by whether mean or coverage
+   matters more; dim128×α1024 is the safer default.
+4. **dsRNA responds to capacity** (−2.46→−7.87% across the sweep) where it was deaf to training length
+   — capacity is the only lever that moved the outlier. But **token-reweighting dsRNA BACKFIRED**
+   (upweight to 10% of tokens → held-out dsRNA got *worse*, +5.28%: LoRA memorised the tiny 1574-record
+   set over ~19 epochs). dsRNA needs *more unique data*, not reweighting.
+5. **α-cliff is sharp and just above 1024**, and **fundamental** (not under-regularization): α1024
+   −23.37% → α1536 **+0.19%** → α2048 +4.97% (all dropout 0.1); dropout 0.3 does **not** rescue α2048
+   (+5.35%). Stay at α ≤ ~1024 unless adding dropout (see 7).
+6. **Dropout is a third, stacking lever (and the new peak).** Every earlier run used dropout 0.1;
+   raising it regularizes the dim256 overfit — mean saturates ~0.2, coverage climbs monotonically:
+
+   | dim256×α1024 | dropout 0.1 | dropout 0.2 | dropout 0.3 |
+   |---|---:|---:|---:|
+   | overall | −23.48% | **−24.33%** | −24.28% |
+   | coverage | 91.0% | 94.6% | **96.4%** |
+
+7. **Dropout also extends the α-cliff.** α1536 diverges at dropout 0.1 (+0.19%) but is **rescued by
+   dropout 0.2 → −24.44%, 94.7%** (the nominal peak) — regularization stretches the usable-α ceiling
+   from ~1024 to ~1536. α2048 remains unrescuable. Gains past α1024×do0.2 are noise-level → **plateau ~−24.4%.**
+
+**Recommended viral-LoRA config: dim256, α1024–1536, dropout 0.2, all-5 targets (MLP carries the
+benefit), 20B, 16k, 3000 steps, vortex-FP8** → **≈−24.4%, ~95% coverage** (nearly 2× the dim16 baseline
+gain of −13.71%). Use dropout 0.3 if maximum coverage (96.4%) matters more than the mean. Leaner
+alternative: dim128×α1024×do0.1 (−23.37%, 93.9%). *Orthogonal length axis (best-config × 6000 steps)
+in progress — tests whether ~−24.4% is the data-limited ceiling.* Details: `EXPLORATION_LOG.md`.
+
+---
+
+## 4c. Blackwell (B300) — 40B fine-tuning verification (NVIDIA checkpoint)
+
+Separate track (8× NVIDIA B300, 268 GB, Blackwell): can we fine-tune Evo2-40B on Blackwell with the
+**NVIDIA** NeMo2 checkpoint (`evo2/40b-1m-fp8-bf16`; the Arc Hopper-FP8 checkpoints don't apply), and
+match the Arc-40B/Hopper result? **Yes — and it's faster and simpler.**
+
+| 40B @1000 | base | LoRA | overall | coverage | precision | parallel | s/step | TFLOP/s |
+|---|---:|---:|---:|---:|---|---|---:|---:|
+| Arc (Hopper) | 3.578 | — | −13.51% | 97.3% | vortex-FP8 | TP4 | 23.4 | ~320 |
+| **NVIDIA (B300)** | 3.647 | 3.092 | **−15.22%** | **98.3%** | **bf16 (no FP8)** | **TP1/DP8** | **~11** | **688** |
+
+**Findings:**
+1. **Blackwell fine-tunes the 40B** end-to-end — 0 NaN, clean loss drop (1.22→1.06), valid preds.
+2. **bf16 is stable on Blackwell → vortex-FP8 not needed** (it was a Hopper-bf16 workaround) — simpler recipe.
+3. **Results equivalent-to-better** than Arc-40B/Hopper at matched steps (−15.22% vs −13.51%, coverage
+   98.3% vs 97.3%). Caveat: different base ckpts (NV 3.647 vs Arc 3.578) + precision → magnitude match,
+   not bit-exact.
+4. **~2× faster, simpler parallelism:** frozen 40B (~80 GB) fits one 268 GB card → TP1/pure-DP8 instead
+   of Hopper's TP4; ~11 s/step & 688 TFLOP/s vs 23.4 s/step & ~320.
+5. **Full (non-LoRA) 40B fine-tune is feasible on B300** (H200's 143 GB cannot): TP4/DP2 smoke ran
+   0 NaN at ~14.5 s/step using only ~145/268 GB. Details: `LOG_B300_blackwell.md`.
+
+---
+
 ## 5. Engineering / feasibility (measured)
 
 | run | parallelism | recompute | peak GB/GPU | s/step | TFLOP/s/GPU |
@@ -243,14 +335,14 @@ is not a training-length problem.
   effectively exhausted as a lever past ~3000 on this corpus** — further length is not the productive
   direction; capacity/data/downstream (C–F below) are.
 
-**C. Adapter capacity (mostly untested)**
-- Only LoRA dim 16 tried. Sweep dim/alpha (e.g. 32/64) — does more capacity help the weak classes
-  (dsRNA, ssRNA(+))? Compare vs full fine-tuning of the 20B as an upper bound.
+**C. Adapter capacity & scaling** — ✅ DONE, see §4b. Swept dim {8…256} and α/dim ratio {1,4,8,16}:
+both are strong, stackable levers; peak **~−23.5%** (nearly 2× the dim16 gain) at **dim128–256 × α1024**;
+**α=2048 diverges** (hard ceiling); MLP adapters carry the benefit. Recommended config in §4b. Full-FT
+upper-bound: feasible on B300/Blackwell (§4c), out of memory-reach on H200.
 
-**D. The dsRNA outlier**
-- dsRNA has the highest base PPL and smallest gain (~−2.5%) across every run. Investigate: class data
-  quantity (n=179), sequence characteristics, tokenization, or genuine domain difficulty. Consider
-  class-reweighting the blend (upweight dsRNA / ssRNA(other)).
+**D. The dsRNA outlier** — ✅ largely characterised (§4b): **capacity is the only lever that moved it**
+(−2.5→−7.9%); **token-reweighting BACKFIRED** (overfit the tiny 1574-record set). Root cause =
+under-representation + genuine difficulty; needs *more unique dsRNA data*, not reweighting or more steps.
 
 **E. Does PPL translate downstream?**
 - All gains are PPL-only. Add a functional eval (variant-effect / zero-shot, cf. the `zeroshot_brca1`
