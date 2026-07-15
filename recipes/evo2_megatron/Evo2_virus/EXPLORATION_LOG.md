@@ -160,8 +160,21 @@ vortex-FP8); scored vs a fresh 7B bf16 base (PPL 3.6128).
   partial-divergence signature of **α too high**: the α-cliff **scales with model width** — α1024
   optimal for 20B over-drives the narrower 7B. → **Optimal adapter config is model-size-dependent, NOT
   universal; α (and dim) must scale with hidden width.**
-- **7B (RUNNING): dim128 × α512 × do0.2** (half-scale) — does a width-proportional config recover/beat
-  the 7B dim16 baseline (−10.90%)? Confirms the "scale the config to the model" fix. `lora_run_7b_scaled`.
+- **7B DONE: dim128 × α512 × do0.2 (half-scale, ratio4) → −8.14%, coverage 60.6%** — **≈ identical to
+  the full 20B config on 7B (−8.05%/59.9%); halving dim+α did NOT fix it.** Still worse than dim16
+  baseline (−10.90%/96.8%), coverage still collapsed ~60%. → **α512 is STILL too high for 7B; the 7B
+  α-cliff is well below 512.** The dim16 baseline works because it uses α32 (ratio2). `lora_run_7b_scaled`.
+- **7B DONE: dim128 × α256 × do0.2 (ratio2) = BREAKTHROUGH → −21.80%, coverage 97.0%!** — **2× the
+  dim16 baseline (−10.90%)**, full coverage, comparable to the 20B range. `lora_run_7b_r2`.
+- **7B (RUNNING): dim256 × α512 × do0.2 (ratio2)** — does doubling dim at ratio2 push the 7B further
+  (as it did the 20B), or is dim128 the 7B capacity sweet spot? `lora_run_7b_r2_dim256`.
+
+### CROSS-SCALE CONCLUSION: the recipe TRANSFERS — scale the α/dim RATIO to model width.
+It was the **ratio (α/dim), not absolute α or dim, that broke the 7B**: ratio4 collapses the 7B
+(coverage ~60%, −8%) but **ratio2 thrives (dim128×α256 → −21.80%, 97% cov)**. Compare 20B: peaks at
+**ratio8** (−23.37%), breaks at ratio16. → **The usable α/dim ratio scales with model width** (7B tops
+out ~ratio2, 20B ~ratio8). Recipe = high capacity + dropout0.2 + **ratio dialed to the model size**.
+The earlier "doesn't transfer" was applying the 20B's ratio (4-8) verbatim, which over-drives the 7B.
 
 ### dsRNA root-cause (GPU-free analysis) — UNDER-REPRESENTATION
 Manifest covers 100% of train records. **dsRNA = 12.2% of records but only 2.45% of TOKENS**

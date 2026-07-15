@@ -253,12 +253,12 @@ at **6000 steps → −24.96% / dsRNA −9.78%** (best mean, coverage dips to 92
 long runs). Nearly 2× the dim16 baseline gain (−13.71%). Leaner alternative: dim128×α1024×do0.1
 (−23.37%, 93.9%). Details: `EXPLORATION_LOG.md`.
 
-> **Cross-scale caveat (this config is 20B-specific).** Applying the 20B best config unchanged to the
-> **7B** gives only **−8.05% / 59.9% coverage** — *worse* than the 7B dim16 baseline (−10.90%, 96.8%).
-> The collapsed coverage is an α-too-high (partial-divergence) signature: **the α-cliff scales with
-> model width**, so α1024 over-drives the narrower 7B. The optimal adapter config is **model-size-
-> dependent** — α (and dim) must be scaled to the model's hidden width, not copied across sizes. A
-> width-proportional 7B config (dim128×α512×do0.2) is under test.
+> **Cross-scale (§4d): the recipe transfers — but you must scale the α/dim RATIO to model width.**
+> Applying the 20B ratio (4–8) verbatim to the **7B** collapses it (dim256×α1024 and dim128×α512, both
+> ratio4 → ~−8% / ~60% coverage, *worse* than the dim16 baseline). But at **ratio 2**, the 7B thrives:
+> **dim128×α256×do0.2 → −21.80% / 97% coverage — 2× the dim16 baseline (−10.90%)**. It's the **α/dim
+> ratio**, not absolute α or dim, that has a width-dependent cliff: 7B tops out ~ratio 2, 20B ~ratio 8.
+> So the recipe = high capacity + dropout 0.2 + **ratio dialed to model size** (smaller model → lower ratio).
 
 ---
 
