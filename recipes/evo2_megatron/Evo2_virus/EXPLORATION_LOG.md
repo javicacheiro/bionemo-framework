@@ -150,6 +150,19 @@ dim16 — does it still help at high capacity+regularization)?
 **Revised peak:** best config × 6000 steps = **−24.96%** (mean) — length + capacity + α-scaling +
 regularization all stack. Coverage/mean trade-off at 6k is the open refinement (do0.3×6k, running).
 
+## Phase 8 — cross-scale generalization (does the 20B recipe transfer?) [ohio, via subagent]
+Ran on ohio (subagent + main bridging). NOTE: 7B base ckpt requires `--model-size evo2_7b_base`
+(11008 MLP dim); `evo2_7b` (11264) errors with a dist-checkpoint shape mismatch. 7B uses bf16 (no
+vortex-FP8); scored vs a fresh 7B bf16 base (PPL 3.6128).
+- **7B × BEST-20B-CONFIG DONE: dim256 × α1024 × do0.2 → −8.05%, coverage 59.9%** (`lora_run_7b_best`).
+  **The 20B recipe does NOT transfer — it's WORSE than the 7B dim16 baseline (−10.90%, cov 96.8%)**
+  and far below the 20B best (−24.33%). The collapsed coverage (60%) + degraded mean is the
+  partial-divergence signature of **α too high**: the α-cliff **scales with model width** — α1024
+  optimal for 20B over-drives the narrower 7B. → **Optimal adapter config is model-size-dependent, NOT
+  universal; α (and dim) must scale with hidden width.**
+- **7B (RUNNING): dim128 × α512 × do0.2** (half-scale) — does a width-proportional config recover/beat
+  the 7B dim16 baseline (−10.90%)? Confirms the "scale the config to the model" fix. `lora_run_7b_scaled`.
+
 ### dsRNA root-cause (GPU-free analysis) — UNDER-REPRESENTATION
 Manifest covers 100% of train records. **dsRNA = 12.2% of records but only 2.45% of TOKENS**
 (dsRNA seqs short, median 2233 bp; dsDNA hogs 65% of tokens). Since training is token-based, dsRNA

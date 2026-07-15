@@ -253,6 +253,13 @@ at **6000 steps → −24.96% / dsRNA −9.78%** (best mean, coverage dips to 92
 long runs). Nearly 2× the dim16 baseline gain (−13.71%). Leaner alternative: dim128×α1024×do0.1
 (−23.37%, 93.9%). Details: `EXPLORATION_LOG.md`.
 
+> **Cross-scale caveat (this config is 20B-specific).** Applying the 20B best config unchanged to the
+> **7B** gives only **−8.05% / 59.9% coverage** — *worse* than the 7B dim16 baseline (−10.90%, 96.8%).
+> The collapsed coverage is an α-too-high (partial-divergence) signature: **the α-cliff scales with
+> model width**, so α1024 over-drives the narrower 7B. The optimal adapter config is **model-size-
+> dependent** — α (and dim) must be scaled to the model's hidden width, not copied across sizes. A
+> width-proportional 7B config (dim128×α512×do0.2) is under test.
+
 ---
 
 ## 4c. Blackwell (B300) — 40B fine-tuning verification (NVIDIA checkpoint)
