@@ -144,8 +144,14 @@ dim16 — does it still help at high capacity+regularization)?
   dsRNA **−9.78%** (best dsRNA by far). **Length is NOT exhausted at the best config**: 3000→6000 gave
   +0.63pp mean and +1.97pp dsRNA — but coverage dropped 94.6→91.8% (**more training re-introduced the
   overfit** that do0.2 had fixed at 3000 → more steps needs more regularization). `..._do2_6k`.
-- **local (RUNNING): dim256 × α1024 × dropout 0.3 × 6000 steps** — does more dropout recover the 6k
-  coverage loss while keeping the −24.96% mean → best of both? `lora_run_20b_16k_dim256_a1024_do3_6k`.
+- **local DONE: dim256 × α1024 × dropout 0.3 × 6000 steps = OVERALL BEST → −25.44%**, coverage 93.7%,
+  dsRNA −9.69%. **do0.3 at 6k beats do0.2 at 6k on BOTH mean (−24.96→−25.44) AND coverage (91.8→93.7%)**
+  — confirms longer training needs more dropout. `lora_run_20b_16k_dim256_a1024_do3_6k`.
+
+## 20B THREAD COMPLETE. Peak = dim256 × α1024 × dropout0.3 × 6000 steps = −25.44% / 93.7% coverage
+(from dim16 baseline −13.71% → **1.85× the gain**). All levers stack: capacity(dim256) + α-scaling
+(α1024, ratio-appropriate) + dropout(0.3 for long runs) + length(6000). Further length (9k) hits the
+data-limited ceiling (§2). 20B exhausted — holding local. 7B cross-scale capacity probe continues on ohio.
 
 **Revised peak:** best config × 6000 steps = **−24.96%** (mean) — length + capacity + α-scaling +
 regularization all stack. Coverage/mean trade-off at 6k is the open refinement (do0.3×6k, running).

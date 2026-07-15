@@ -242,10 +242,12 @@ almost all the benefit;** attn/mixer projections add only ~0.4 pp. Put capacity 
    dropout 0.2 → −24.44%, 94.7%** (the nominal peak) — regularization stretches the usable-α ceiling
    from ~1024 to ~1536. α2048 remains unrescuable. Gains past α1024×do0.2 are noise-level → **plateau ~−24.4%.**
 
-8. **Length still helps the best config (not at the data-limited ceiling).** Best config × **6000
-   steps** → **−24.96%** (mean), dsRNA **−9.78%** (best dsRNA by far) — 3000→6000 buys +0.63 pp mean
-   and +1.97 pp dsRNA. But coverage drops 94.6→91.8% (more training re-introduces the overfit dropout
-   0.2 fixed at 3000 → longer runs need more dropout; do0.3×6k running to recover it). `..._do2_6k`.
+8. **Length still helps the best config, and dropout must rise with it (OVERALL PEAK).** Best config
+   × **6000 steps** at dropout 0.2 → −24.96% but coverage dips to 91.8% (longer training re-introduces
+   the overfit). Raising to **dropout 0.3 at 6000 steps → −25.44% / 93.7% coverage, dsRNA −9.69%** — the
+   best result of the sweep, better than do0.2×6k on both mean and coverage. **Peak config: dim256 ×
+   α1024 × dropout0.3 × 6000 steps = −25.44%** (1.85× the dim16 baseline gain of −13.71%). Length past
+   6k hits the data-limited ceiling (§2). `..._do3_6k`.
 
 **Recommended viral-LoRA config: dim256, α1024–1536, dropout 0.2, all-5 targets (MLP carries the
 benefit), 20B, 16k, vortex-FP8.** At **3000 steps → ≈−24.4% / ~95% coverage** (price/perf sweet spot);
