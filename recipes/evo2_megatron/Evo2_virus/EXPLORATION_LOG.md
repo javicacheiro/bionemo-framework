@@ -172,8 +172,15 @@ vortex-FP8); scored vs a fresh 7B bf16 base (PPL 3.6128).
   α-cliff is well below 512.** The dim16 baseline works because it uses α32 (ratio2). `lora_run_7b_scaled`.
 - **7B DONE: dim128 × α256 × do0.2 (ratio2) = BREAKTHROUGH → −21.80%, coverage 97.0%!** — **2× the
   dim16 baseline (−10.90%)**, full coverage, comparable to the 20B range. `lora_run_7b_r2`.
-- **7B (RUNNING): dim256 × α512 × do0.2 (ratio2)** — does doubling dim at ratio2 push the 7B further
-  (as it did the 20B), or is dim128 the 7B capacity sweet spot? `lora_run_7b_r2_dim256`.
+- **7B DONE: dim256 × α512 × do0.2 (ratio2) = 7B BEST → −23.32%, coverage 96.0%.** More capacity at
+  ratio2 helps the 7B too (dim128→dim256: −21.80%→−23.32%, +1.52pp), just like on the 20B.
+  `lora_run_7b_r2_dim256`.
+
+## 7B THREAD COMPLETE — recipe transfers, both sizes want dim256, differ only in ratio.
+7B best = dim256×α512 (ratio2) do0.2 = **−23.32%/96%**; 20B best (3k) = dim256×α1024 (ratio4-8) do0.2 =
+−24.33%/94.6%. **Same dim256 capacity + dropout0.2; only the α/dim ratio scales with width (7B→2, 20B→8).**
+7B (−23.32%) nearly matches 20B (−24.33%) at 3k. Both servers now idle — adapter frontier fully mapped
+across two scales. Open: 40B scaling-law point (expensive, offered to user); downstream eval; leakage audit.
 
 ### CROSS-SCALE CONCLUSION: the recipe TRANSFERS — scale the α/dim RATIO to model width.
 It was the **ratio (α/dim), not absolute α or dim, that broke the 7B**: ratio4 collapses the 7B

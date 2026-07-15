@@ -255,12 +255,25 @@ at **6000 steps → −24.96% / dsRNA −9.78%** (best mean, coverage dips to 92
 long runs). Nearly 2× the dim16 baseline gain (−13.71%). Leaner alternative: dim128×α1024×do0.1
 (−23.37%, 93.9%). Details: `EXPLORATION_LOG.md`.
 
-> **Cross-scale (§4d): the recipe transfers — but you must scale the α/dim RATIO to model width.**
-> Applying the 20B ratio (4–8) verbatim to the **7B** collapses it (dim256×α1024 and dim128×α512, both
-> ratio4 → ~−8% / ~60% coverage, *worse* than the dim16 baseline). But at **ratio 2**, the 7B thrives:
-> **dim128×α256×do0.2 → −21.80% / 97% coverage — 2× the dim16 baseline (−10.90%)**. It's the **α/dim
-> ratio**, not absolute α or dim, that has a width-dependent cliff: 7B tops out ~ratio 2, 20B ~ratio 8.
-> So the recipe = high capacity + dropout 0.2 + **ratio dialed to model size** (smaller model → lower ratio).
+### Cross-scale (7B vs 20B): the recipe transfers — scale the α/dim RATIO to model width
+
+Applying the 20B ratio (4–8) verbatim to the **7B** collapses it — dim256×α1024 and dim128×α512 (both
+**ratio 4**) give ~−8% / ~60% coverage, *worse* than the 7B dim16 baseline. But it's the **ratio**, not
+absolute α or dim, that has a width-dependent cliff. Dialed to **ratio 2**, the 7B thrives:
+
+| 7B config | ratio | overall | coverage |
+|---|---:|---:|---:|
+| dim16×α32 (baseline) | 2 | −10.90% | 96.8% |
+| dim128×α512 | 4 | −8.14% | 60.6% (broken) |
+| dim256×α1024 | 4 | −8.05% | 59.9% (broken) |
+| dim128×α256 | 2 | −21.80% | 97.0% |
+| **dim256×α512** | **2** | **−23.32%** | **96.0%** |
+
+**7B optimum (dim256×α512, ratio 2) = −23.32%, nearly matching the 20B optimum (dim256×α1024, −24.33%
+at 3k).** Both scales want the **same dim256 capacity + dropout 0.2 + MLP-heavy targets**; they differ
+*only* in the α/dim ratio — **7B peaks ~ratio 2, 20B ~ratio 8 → the usable ratio scales with model
+width.** Practical recipe: dim256 + dropout 0.2 + all-5 targets, with ratio set by model size (small→2,
+large→8). (7B: bf16, no vortex-FP8; base loads as `--model-size evo2_7b_base`.)
 
 ---
 
