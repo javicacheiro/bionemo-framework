@@ -271,9 +271,23 @@ absolute α or dim, that has a width-dependent cliff. Dialed to **ratio 2**, the
 
 **7B optimum (dim256×α512, ratio 2) = −23.32%, nearly matching the 20B optimum (dim256×α1024, −24.33%
 at 3k).** Both scales want the **same dim256 capacity + dropout 0.2 + MLP-heavy targets**; they differ
-*only* in the α/dim ratio — **7B peaks ~ratio 2, 20B ~ratio 8 → the usable ratio scales with model
-width.** Practical recipe: dim256 + dropout 0.2 + all-5 targets, with ratio set by model size (small→2,
-large→8). (7B: bf16, no vortex-FP8; base loads as `--model-size evo2_7b_base`.)
+in the usable α. (7B: bf16, no vortex-FP8; base loads as `--model-size evo2_7b_base`.)
+
+**Extending to 40B (Arc ckpt, TP4+vortex-FP8) makes the law non-monotonic — and corrects the naive
+"bigger tolerates more" guess.** Full 3-scale picture (all dim256 + dropout 0.2 + all-5 targets):
+
+| model | usable-α ceiling | best healthy config | overall | steps |
+|---|---|---|---:|---:|
+| 7B  | ~α512  | dim256×α512 (ratio 2)   | −23.32% | 3000 |
+| 20B | ~α1024–1536 | dim256×α1024 (ratio 4–8) | −24.33% | 3000 |
+| 40B | ~α1024 | dim256×α1024 (ratio 4)  | −20.90% | 1000† |
+
+† 40B ran 1000 steps (time); vs its own dim16@1000 baseline (−13.51%) that's **+7.4 pp**. Two findings:
+(1) **the usable α rises 7B→20B then *plateaus* ~α1024 by 40B** — it does *not* keep climbing with width;
+(2) **divergence past the ceiling gets *more violent* with scale** — 7B/20B collapse coverage gently
+(~+3–5%), but the **40B explodes** (α2048 → in-train val PPL ~500 vs base 3.6). **Practical recipe:
+dim256 + dropout 0.2 + all-5 targets, α tuned per scale and capped ~α1024; be MORE conservative on
+larger models, not less.**
 
 ---
 

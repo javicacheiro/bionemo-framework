@@ -176,6 +176,36 @@ vortex-FP8); scored vs a fresh 7B bf16 base (PPL 3.6128).
   ratio2 helps the 7B too (dim128→dim256: −21.80%→−23.32%, +1.52pp), just like on the 20B.
   `lora_run_7b_r2_dim256`.
 
+## Phase 9 — 40B cross-scale point (two nodes) — the hypothesis breaks
+Tested the 40B (Arc /data/evo2_40b_mbridge, TP4+vortex-FP8, dim256×do0.2, 1000 steps) to extend the
+ratio-scaling law. FIRST pass picked high α by (wrong) extrapolation of "wider tolerates higher":
+- **40B dim256×α2048 (local) → DIVERGED, in-train val PPL ~498.** (α2048 was only *mildly* broken on 20B, val ~3.6.)
+- **40B dim256×α4096 (ohio) → DIVERGED, in-train val PPL ~507.**
+→ **Both catastrophic — FAR more violent than the 20B at the same α. The 40B is MORE fragile to LoRA
+scaling, not less.** The α-ceiling does NOT keep rising with width (7B~512, 20B~1024, but 40B < 2048 and
+the divergence is explosive). Over-extrapolation corrected.
+- **RELAUNCHED at conservative α to find the 40B healthy regime:** local **dim256×α1024** (20B-safe,
+  ratio4) + ohio **dim256×α512** (7B-safe, ratio2). Brackets the real 40B ceiling. `lora_run_40b_a1024`,
+  `lora_run_40b_a512`.
+- **40B DONE (@1000 steps, vs 40B base 3.579):**
+  - **α1024 (ratio4): −20.90%, cov 97.4%** (in-train val 2.631) ← 40B best
+  - **α512 (ratio2): −20.23%, cov 97.9%** (in-train val 2.654)
+  Both healthy; α1024 marginally better mean. vs 40B **dim16@1000 baseline −13.51%** → **+7.4pp** at
+  matched steps (40B ran 1000 steps for time, not the 3000 of 7B/20B). → **40B ceiling ~α1024** (α2048
+  explodes). `lora_run_40b_a1024` best.
+
+## CROSS-SCALE SCALING LAW (3 points, all dim256 + do0.2 + all-5 targets; capped per-genome):
+| model | α ceiling | best healthy config | overall | note |
+|---|---|---|---:|---|
+| 7B  | ~α512  | dim256×α512 (ratio2)  | −23.32% (@3000) | α1024 breaks |
+| 20B | ~α1024-1536 | dim256×α1024 (ratio4-8) | −24.33% (@3000) | α2048 breaks (mild) |
+| 40B | ~α1024 | dim256×α1024 (ratio4) | −20.90% (@1000) | α2048 EXPLODES (val ~500) |
+
+**Law:** usable α **rises 7B→20B then plateaus ~α1024 by 40B** (NOT monotonic/unbounded with width);
+**divergence past the ceiling gets MORE violent with scale** (7B/20B: gentle coverage collapse; 40B:
+explosive val ~500). All scales want dim256 + dropout. **Practical recipe: dim256 + do0.2 + all-5, α
+tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opposite of the naive guess).
+
 ## 7B THREAD COMPLETE — recipe transfers, both sizes want dim256, differ only in ratio.
 7B best = dim256×α512 (ratio2) do0.2 = **−23.32%/96%**; 20B best (3k) = dim256×α1024 (ratio4-8) do0.2 =
 −24.33%/94.6%. **Same dim256 capacity + dropout0.2; only the α/dim ratio scales with width (7B→2, 20B→8).**
