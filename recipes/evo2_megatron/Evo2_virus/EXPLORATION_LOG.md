@@ -206,6 +206,15 @@ the divergence is explosive). Over-extrapolation corrected.
 explosive val ~500). All scales want dim256 + dropout. **Practical recipe: dim256 + do0.2 + all-5, α
 tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opposite of the naive guess).
 
+## Phase 10 — length across scales (autonomous, user away)
+- **7B DONE: dim256×α512×do0.2 × 6000 steps → −24.44%, cov 93.8%, dsRNA −8.12%.** Length helps the 7B
+  best (+1.12pp over @3000 −23.32%); coverage dips 96→93.8% (same length-overfit the 20B's do0.3 fixed).
+  **7B@6k (−24.44%) now MATCHES the 20B best@3k (−24.33%)** — a well-tuned 7B + length ≈ the 20B.
+  `lora_run_7b_best6k`.
+- **ohio (RUNNING): dim256×α512×do0.3 × 6000** — does more dropout recover the 7B's 6k coverage (as
+  do0.3 did for the 20B → −25.44%)? Completes length×dropout across scales; likely new 7B best. `lora_run_7b_best6k_do3`.
+- **local (RUNNING): 40B dim256×α1024×do0.2 × 3000** (step-match, the ask) → ~15:00 UTC. `lora_run_40b_a1024_3k`.
+
 ## 7B THREAD COMPLETE — recipe transfers, both sizes want dim256, differ only in ratio.
 7B best = dim256×α512 (ratio2) do0.2 = **−23.32%/96%**; 20B best (3k) = dim256×α1024 (ratio4-8) do0.2 =
 −24.33%/94.6%. **Same dim256 capacity + dropout0.2; only the α/dim ratio scales with width (7B→2, 20B→8).**
