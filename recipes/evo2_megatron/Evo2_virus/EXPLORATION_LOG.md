@@ -211,9 +211,13 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
   best (+1.12pp over @3000 −23.32%); coverage dips 96→93.8% (same length-overfit the 20B's do0.3 fixed).
   **7B@6k (−24.44%) now MATCHES the 20B best@3k (−24.33%)** — a well-tuned 7B + length ≈ the 20B.
   `lora_run_7b_best6k`.
-- **ohio (RUNNING): dim256×α512×do0.3 × 6000** — does more dropout recover the 7B's 6k coverage (as
-  do0.3 did for the 20B → −25.44%)? Completes length×dropout across scales; likely new 7B best. `lora_run_7b_best6k_do3`.
+- **ohio DONE: dim256×α512×do0.3 × 6000 → −15.84%, cov 80.7% — WORSE than do0.2@6k (−24.44%/93.8%)!**
+  Dropout 0.3 HURTS the 7B (over-regularizes the smaller model), opposite of the 20B (where do0.3@6k
+  helped → −25.44%). `lora_run_7b_best6k_do3`. → **Optimal dropout is scale-dependent: rises with model
+  size** (7B wants do0.2, 20B wants do0.3 for long runs). **7B optimum = dim256×α512×do0.2×6000 = −24.44%.**
 - **local (RUNNING): 40B dim256×α1024×do0.2 × 3000** (step-match, the ask) → ~15:00 UTC. `lora_run_40b_a1024_3k`.
+- **ohio (RUNNING): 40B dim256×α512×do0.2 × 3000** — completes the 40B ratio pair at step-matched 3000
+  (parallel to local's α1024@3000). `lora_run_40b_a512_3k`.
 
 ## 7B THREAD COMPLETE — recipe transfers, both sizes want dim256, differ only in ratio.
 7B best = dim256×α512 (ratio2) do0.2 = **−23.32%/96%**; 20B best (3k) = dim256×α1024 (ratio4-8) do0.2 =
