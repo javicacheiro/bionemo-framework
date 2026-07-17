@@ -215,9 +215,19 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
   Dropout 0.3 HURTS the 7B (over-regularizes the smaller model), opposite of the 20B (where do0.3@6k
   helped → −25.44%). `lora_run_7b_best6k_do3`. → **Optimal dropout is scale-dependent: rises with model
   size** (7B wants do0.2, 20B wants do0.3 for long runs). **7B optimum = dim256×α512×do0.2×6000 = −24.44%.**
-- **local (RUNNING): 40B dim256×α1024×do0.2 × 3000** (step-match, the ask) → ~15:00 UTC. `lora_run_40b_a1024_3k`.
-- **ohio (RUNNING): 40B dim256×α512×do0.2 × 3000** — completes the 40B ratio pair at step-matched 3000
-  (parallel to local's α1024@3000). `lora_run_40b_a512_3k`.
+- **local DONE: 40B dim256×α1024×do0.2 × 3000 → DIVERGED** (in-train val ~3.9 from step500, never
+  learned; scoring predict then errored on the broken adapter). **Same config was HEALTHY at 1000 steps
+  (val 2.63, −20.90%)** — the difference is the SCHEDULE: decay over 3000 keeps LR higher longer, and
+  the fragile 40B can't tolerate sustained higher LR at α1024. `lora_run_40b_a1024_3k`.
+- **ohio (RUNNING): 40B dim256×α512×do0.2 × 3000 → HEALTHY** (val 2.94→2.80 dropping) — the more
+  conservative α512 SURVIVES the 3000-step schedule → **this is the valid 40B step-match.** ETA ~23:20. `lora_run_40b_a512_3k`.
+- **local (RUNNING): 40B dim256×α1024×do0.2 × 3000, lr 1.5e-4 (half)** — is the α1024@3000 divergence
+  LR-driven (sustained high LR) or α-fundamental? If gentler LR rescues α1024@3000 → 40B just needs a
+  lower LR for longer training (and may beat α512). `lora_run_40b_a1024_3k_lr15`.
+
+### 40B fragility (key): the 40B is far more LR/α-sensitive than the 20B. α2048 explodes (val ~500);
+α1024 is stable ONLY at 1000 steps (fast decay) and DIVERGES at 3000 (sustained LR); α512 is stable at
+3000. → For the fragile 40B, step-matched/longer training needs LOWER α (and/or lower LR) than the 20B.
 
 ## 7B THREAD COMPLETE — recipe transfers, both sizes want dim256, differ only in ratio.
 7B best = dim256×α512 (ratio2) do0.2 = **−23.32%/96%**; 20B best (3k) = dim256×α1024 (ratio4-8) do0.2 =
