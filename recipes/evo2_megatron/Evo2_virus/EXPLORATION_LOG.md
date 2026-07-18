@@ -225,6 +225,17 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
   LR-driven (sustained high LR) or α-fundamental? If gentler LR rescues α1024@3000 → 40B just needs a
   lower LR for longer training (and may beat α512). `lora_run_40b_a1024_3k_lr15`.
 
+## Phase 11 — B300 bf16 40B fragility test: BLOCKED by a stock-image bug (not a result)
+Tried to test whether the 40B fragility is precision-specific by running the NVIDIA-40B in plain bf16
+on a Blackwell B300 (α1024×3000). **Blocked:** the B300's STOCK `train_evo2` (image evo2:20260628,
+without the modified Hopper source) throws `'Parameter' object has no attribute 'main_grad'` for
+**dim≥128 LoRA in the plain-bf16 path** (dim16 works; dim128 AND dim256 fail, at both TP1 and TP4; not
+memory — fails at 71 GB/GPU on TP4). The stock `train_evo2` also lacks the `--vortex-style-fp8` flag
+(that's a Hopper-repo source modification). The Hopper env sidesteps the bug via the modified code +
+vortex-FP8. Did NOT port the WIP code autonomously. B300 left provisioned (SSH key `claude-h200`,
+container up, data + both 40B ckpts ready) for user-directed use. **The bf16-vs-FP8 40B fragility
+question remains open** (needs the modified train_evo2 on the B300, or a Blackwell node with the repo).
+
 ### 40B fragility (key): the 40B is far more LR/α-sensitive than the 20B. α2048 explodes (val ~500);
 α1024 is stable ONLY at 1000 steps (fast decay) and DIVERGES at 3000 (sustained LR); α512 is stable at
 3000. → For the fragile 40B, step-matched/longer training needs LOWER α (and/or lower LR) than the 20B.
@@ -240,9 +251,19 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
   divergence is LR-driven, not α-fundamental. BUT the capped score (−22.87%) is WORSE than α512@lr3e-4
   (−23.43%) — the lower LR trades adaptation for stability. **40B best@3000 stays α512 = −23.43%; still
   < 20B.** `lora_run_40b_a1024_3k_lr15`. (auto-score hit a GPU-teardown race; re-scored clean.)
-- **local (RUNNING): 20B dim256×α2048×do0.2 × 3000, lr1.5e-4** — apply the LR insight BACK to the 20B:
-  α2048 broke the 20B at lr3e-4 (+2.77%); does half-LR rescue it and beat the 20B peak (−24.33%@3k)?
-  Tests whether the α-ceiling is really an α×LR ceiling. `lora_run_20b_a2048_lr15`.
+- **local DONE: 20B dim256×α2048×do0.2 × 3000, lr1.5e-4 → −24.01%, cov 94.7%** (val 2.529). Half-LR
+  RESCUES the 20B's α2048 (broke to +2.77% at lr3e-4) — but the rescued config (−24.01%) does NOT beat
+  the α1024@lr3e-4 peak (−24.33%). `lora_run_20b_a2048_lr15`.
+
+## α×LR — UNIFIED CONCLUSION (no free lunch). The "α ceiling" is an α×LR (effective-update-magnitude)
+ceiling: high α breaks at standard LR but is RESCUED by halving LR — yet the rescued high-α/low-LR
+config NEVER beats the standard-α/standard-LR peak (lower LR trades away exactly the adaptation the
+higher α buys). Same at both scales:
+| scale | peak (std LR) | high-α rescued (½ LR) | high-α (std LR) |
+|---|---|---|---|
+| 20B | α1024@3e-4 **−24.33%** | α2048@1.5e-4 −24.01% | α2048@3e-4 BROKE (+2.77%) |
+| 40B | α512@3e-4 **−23.43%** | α1024@1.5e-4 −22.87% | α1024@3e-4 BROKE (diverged) |
+→ You cannot unlock a higher peak by pushing α + lowering LR. The peak is set by the standard-LR α ceiling.
 
 ## 7B THREAD COMPLETE — recipe transfers, both sizes want dim256, differ only in ratio.
 7B best = dim256×α512 (ratio2) do0.2 = **−23.32%/96%**; 20B best (3k) = dim256×α1024 (ratio4-8) do0.2 =
