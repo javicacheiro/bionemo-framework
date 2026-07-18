@@ -229,6 +229,13 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
 α1024 is stable ONLY at 1000 steps (fast decay) and DIVERGES at 3000 (sustained LR); α512 is stable at
 3000. → For the fragile 40B, step-matched/longer training needs LOWER α (and/or lower LR) than the 20B.
 
+- **ohio DONE: 40B dim256×α512×do0.2 × 3000 = STEP-MATCH → −23.43%, coverage 94.7%** (val 2.544).
+  Step-matched cross-scale @3000: **7B −23.32% | 20B −24.33% | 40B −23.43%.** → **The 40B does NOT beat
+  the 20B** at matched steps — its fragility forces α512 (< 20B's α1024), capping it at ~20B/7B level.
+  **20B remains the sweet spot.** `lora_run_40b_a512_3k`.
+- **ohio (RUNNING): 40B dim256×α768×do0.2 × 3000** — pin the 40B step-matched optimum: is there a stable
+  α between 512 (−23.43%) and 1024 (diverges) that does better? `lora_run_40b_a768_3k`.
+
 ## 7B THREAD COMPLETE — recipe transfers, both sizes want dim256, differ only in ratio.
 7B best = dim256×α512 (ratio2) do0.2 = **−23.32%/96%**; 20B best (3k) = dim256×α1024 (ratio4-8) do0.2 =
 −24.33%/94.6%. **Same dim256 capacity + dropout0.2; only the α/dim ratio scales with width (7B→2, 20B→8).**

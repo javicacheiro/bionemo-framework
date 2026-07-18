@@ -279,15 +279,17 @@ in the usable α. (7B: bf16, no vortex-FP8; base loads as `--model-size evo2_7b_
 | model | usable-α ceiling | best healthy config | overall | steps |
 |---|---|---|---:|---:|
 | 7B  | ~α512  | dim256×α512 (ratio 2)   | −23.32% | 3000 |
-| 20B | ~α1024–1536 | dim256×α1024 (ratio 4–8) | −24.33% | 3000 |
-| 40B | ~α1024 | dim256×α1024 (ratio 4)  | −20.90% | 1000† |
+| 20B | ~α1024–1536 | dim256×α1024 (ratio 4–8) | **−24.33%** | 3000 |
+| 40B | ~α512 (@3000) | dim256×α512 (ratio 2)  | −23.43% | 3000 |
 
-† 40B ran 1000 steps (time); vs its own dim16@1000 baseline (−13.51%) that's **+7.4 pp**. Two findings:
-(1) **the usable α rises 7B→20B then *plateaus* ~α1024 by 40B** — it does *not* keep climbing with width;
+**Step-matched @3000, the 40B does NOT beat the 20B** (−23.43% vs −24.33%) — it lands ≈ the 7B. Two findings:
+(1) **the usable α does NOT keep climbing with width** — it rises 7B→20B (~α512→~α1024) then the 40B is
+*more fragile*, forcing α back down to ~α512 for stable 3000-step training;
 (2) **divergence past the ceiling gets *more violent* with scale** — 7B/20B collapse coverage gently
-(~+3–5%), but the **40B explodes** (α2048 → in-train val PPL ~500 vs base 3.6). **Practical recipe:
-dim256 + dropout 0.2 + all-5 targets, α tuned per scale and capped ~α1024; be MORE conservative on
-larger models, not less.**
+(~+3–5%), but the **40B explodes** (α2048 → in-train val PPL ~500; even α1024 diverges at 3000 steps
+under the standard LR, though it's stable at 1000). **Practical recipe: dim256 + dropout 0.2 + all-5
+targets, α tuned per scale and capped conservatively (7B ~512, 20B ~1024, 40B ~512) — be MORE careful
+on larger models, not less. 20B is the price/perf sweet spot; 40B does not surpass it.**
 
 ---
 
