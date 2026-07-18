@@ -235,6 +235,14 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
   **20B remains the sweet spot.** `lora_run_40b_a512_3k`.
 - **ohio (RUNNING): 40B dim256×α768×do0.2 × 3000** — pin the 40B step-matched optimum: is there a stable
   α between 512 (−23.43%) and 1024 (diverges) that does better? `lora_run_40b_a768_3k`.
+- **local DONE: 40B dim256×α1024×do0.2 × 3000, lr1.5e-4 → −22.87%, cov 95.0%** (val 2.488, best in-train
+  of any 40B). **LR-rescue CONFIRMED: half-LR makes α1024 stable at 3000** (vs diverged at lr3e-4) → the
+  divergence is LR-driven, not α-fundamental. BUT the capped score (−22.87%) is WORSE than α512@lr3e-4
+  (−23.43%) — the lower LR trades adaptation for stability. **40B best@3000 stays α512 = −23.43%; still
+  < 20B.** `lora_run_40b_a1024_3k_lr15`. (auto-score hit a GPU-teardown race; re-scored clean.)
+- **local (RUNNING): 20B dim256×α2048×do0.2 × 3000, lr1.5e-4** — apply the LR insight BACK to the 20B:
+  α2048 broke the 20B at lr3e-4 (+2.77%); does half-LR rescue it and beat the 20B peak (−24.33%@3k)?
+  Tests whether the α-ceiling is really an α×LR ceiling. `lora_run_20b_a2048_lr15`.
 
 ## 7B THREAD COMPLETE — recipe transfers, both sizes want dim256, differ only in ratio.
 7B best = dim256×α512 (ratio2) do0.2 = **−23.32%/96%**; 20B best (3k) = dim256×α1024 (ratio4-8) do0.2 =
