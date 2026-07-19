@@ -244,8 +244,10 @@ question remains open** (needs the modified train_evo2 on the B300, or a Blackwe
   Step-matched cross-scale @3000: **7B −23.32% | 20B −24.33% | 40B −23.43%.** → **The 40B does NOT beat
   the 20B** at matched steps — its fragility forces α512 (< 20B's α1024), capping it at ~20B/7B level.
   **20B remains the sweet spot.** `lora_run_40b_a512_3k`.
-- **ohio (RUNNING): 40B dim256×α768×do0.2 × 3000** — pin the 40B step-matched optimum: is there a stable
-  α between 512 (−23.43%) and 1024 (diverges) that does better? `lora_run_40b_a768_3k`.
+- **ohio DONE: 40B dim256×α768×do0.2 × 3000 = 40B OPTIMUM → −23.95%, cov 94.7%** (val 2.537). Stable
+  where α1024 diverges; better than α512 (−23.43%). **40B step-matched optimum = α768, right at the
+  stability edge.** Still < 20B (−24.33%) — nearly matches but doesn't beat it. `lora_run_40b_a768_3k`.
+  40B α-ladder@3000: α512 −23.43% | **α768 −23.95% (peak, edge of stability)** | α1024 diverges.
 - **local DONE: 40B dim256×α1024×do0.2 × 3000, lr1.5e-4 → −22.87%, cov 95.0%** (val 2.488, best in-train
   of any 40B). **LR-rescue CONFIRMED: half-LR makes α1024 stable at 3000** (vs diverged at lr3e-4) → the
   divergence is LR-driven, not α-fundamental. BUT the capped score (−22.87%) is WORSE than α512@lr3e-4

@@ -280,9 +280,10 @@ in the usable α. (7B: bf16, no vortex-FP8; base loads as `--model-size evo2_7b_
 |---|---|---|---:|---:|
 | 7B  | ~α512  | dim256×α512 (ratio 2)   | −23.32% | 3000 |
 | 20B | ~α1024–1536 | dim256×α1024 (ratio 4–8) | **−24.33%** | 3000 |
-| 40B | ~α512 (@3000) | dim256×α512 (ratio 2)  | −23.43% | 3000 |
+| 40B | ~α768 (@3000, edge) | dim256×α768 (ratio 3)  | −23.95% | 3000 |
 
-**Step-matched @3000, the 40B does NOT beat the 20B** (−23.43% vs −24.33%) — it lands ≈ the 7B. Two findings:
+**Step-matched @3000, the 40B does NOT beat the 20B** (best −23.95% at α768, vs 20B −24.33%) — the 40B
+optimum sits right at its stability edge (α768 stable, α1024 diverges under the standard LR). Two findings:
 (1) **the usable α does NOT keep climbing with width** — it rises 7B→20B (~α512→~α1024) then the 40B is
 *more fragile*, forcing α back down to ~α512 for stable 3000-step training;
 (2) **divergence past the ceiling gets *more violent* with scale** — 7B/20B collapse coverage gently
