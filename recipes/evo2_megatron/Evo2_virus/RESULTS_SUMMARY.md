@@ -345,10 +345,15 @@ match the Arc-40B/Hopper result? **Yes — and it's faster and simpler.**
 
 ## 6. Caveats / data-quality flags (important for the analysis)
 
-1. **Possible train/eval leakage:** `KF740664.1|ictv:VMR1024671` was flagged as contaminated against
-   Evo2's *own base pretraining* data and slated for rescoring. The per-genome tables above **predate**
-   that rescoring — some capped numbers may shift. **Recommend a full leakage audit (valid vs Evo2
-   pretraining) before drawing final per-genome conclusions.**
+1. **Train/eval leakage — AUDITED, headline survives (see `LEAKAGE_AUDIT.md`).** The `KF740664.1` flag
+   turned out to be a **dedup** step that removed exactly that one record (1349→1348); it is **already
+   excluded** from the −25.44% headline (aggregate scores base∩lora = 1348). A memorization-proxy audit
+   (anomalously-low base-PPL records, since Evo2's real pretraining set isn't local) shows contamination
+   suspects **deflate, not inflate** the gain — excluding them *strengthens* the headline (−25.44% →
+   −26.12% excluding the bottom-5% base-PPL). Own train/valid split is clean (0 overlaps/duplicates).
+   **Conclusion: −25.44% is clean and conservative.** *Still open (validation, not correction): a full
+   exact-overlap/minhash audit vs Evo2's actual pretraining corpus (OpenGenome2) needs that non-local
+   reference.*
 2. **Eval noise:** in-training val PPL uses only `--eval-iters 20` → ±~0.02–0.05 jitter (e.g. 128k@3000
    1500→1750 went 2.738→2.756, within noise). End-of-train full-val numbers are the reliable ones.
 3. **Base-precision mismatch:** 1B/7B scored vs a bf16 base (3.612); 20B/40B/context vs a vortex-FP8

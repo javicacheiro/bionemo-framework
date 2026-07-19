@@ -26,6 +26,7 @@
 
 # Consolidated results doc + uncapped length-stratified scoring + its scripts
 !/RESULTS_SUMMARY.md
+!/LEAKAGE_AUDIT.md
 !/EXPLORATION_LOG.md
 !/RESULTS_uncapped_bylen.txt
 !/analysis/
