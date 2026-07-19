@@ -8,6 +8,7 @@
 !/.gitignore
 !/README.md
 !/COMMANDS.sh
+!/RECIPE.sh
 !/CHANGES.md
 !/LOG_evo2_7b_8k.md
 !/LOG_evo2_20b.md
