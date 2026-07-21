@@ -225,6 +225,23 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
   LR-driven (sustained high LR) or α-fundamental? If gentler LR rescues α1024@3000 → 40B just needs a
   lower LR for longer training (and may beat α512). `lora_run_40b_a1024_3k_lr15`.
 
+## Phase 12 — context-length revisit at BEST config (dim256×α1024×do0.2, 20B) [2 H200 nodes]
+Re-asked §3's "does long context help" at HIGH capacity (dim16 → dim256). Trained 32k-best (local,
+3000 steps, TP2, val 2.406) and 128k-best (ohio, 1000 steps, TP4). Scored uncapped length-stratified
+(base/16k-best/128k-best, PASS1 CP=1 short + PASS2 CP=8 long) on ohio; 32k-best capped on local.
+- **32k-best capped = −24.39% ≈ 16k-best (−24.33%)** — context-neutral on the overall/capped metric (§3 holds at dim256).
+- **16k-best uncapped = −24.72% overall, and STRONG on every length bucket incl. the long tail:**
+  A≤8k −24.88 | B 8-16k −24.48 | C 16-32k −22.73 | **D 32-128k −24.06 | E >128k −21.75**. → **The 16k-trained
+  adapter GENERALIZES to long genomes it never trained on** (−22 to −24% on >16k records at full length).
+- **128k-best DIVERGED** (in-train val rose 3.49→3.84 > base 3.58; final loss 1.34 vs ~0.8 healthy; 0 NaN;
+  uncapped +10% WORSE than base on every bucket incl. the ≤8192 control). dim256×α1024 is unstable at
+  128k/TP4 — the same high-effective-magnitude fragility (α×LR / long-context). Not a usable adapter.
+
+### CONTEXT CONCLUSION (dim256): 16k is the clear choice. The 16k-best adapter already handles the
+long-genome tail (generalizes to >128k records), so long-context TRAINING adds no headroom — and at high
+capacity it's counterproductive (128k training diverges). Stronger than §3b's dim16 verdict: not just
+"context ≈ neutral" but "16k generalizes to long records AND long-context training is unstable at dim256."
+
 ## Phase 11 — B300 bf16 40B fragility test: BLOCKED by a stock-image bug (not a result)
 Tried to test whether the 40B fragility is precision-specific by running the NVIDIA-40B in plain bf16
 on a Blackwell B300 (α1024×3000). **Blocked:** the B300's STOCK `train_evo2` (image evo2:20260628,

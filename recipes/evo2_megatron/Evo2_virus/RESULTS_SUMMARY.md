@@ -140,6 +140,16 @@ sliver of the data, for the wrong class, and it degrades the common case. **16k 
 choice.** The value of this experiment: it upgrades the verdict from "context doesn't help (but our
 metric was blind)" to "context helps ~0.5–0.8% on >32 kb records, still not worth 8–12× cost."
 
+**§3c — Revisited at the BEST config (dim256×α1024×do0.2, uncapped length-stratified):** the conclusion
+gets *stronger*, not weaker. The **16k-best adapter is strong on every length bucket at full length** —
+−24.9% (≤8k) … −22.7% (16–32k) … **−24.1% (32–128k) … −21.8% (>128k)** — i.e. it **generalizes to
+long genomes it never trained on**, leaving no headroom for long-context training. Meanwhile the
+**128k-best run (dim256×α1024, 1000 steps) DIVERGED** (in-train val 3.84 > base 3.58; +10% worse than
+base on every bucket incl. the ≤8192 control) — high-capacity + long-context hits the same
+effective-magnitude fragility as the α-cliff. And 32k-best capped (−24.39%) ≈ 16k-best (−24.33%).
+→ At high capacity, **16k is decisively right: it already covers the long tail, and long-context
+training is both unnecessary and unstable.**
+
 ---
 
 ## 4. Per-genome breakdown (base→LoRA capped 8192 bp, % improvement)
