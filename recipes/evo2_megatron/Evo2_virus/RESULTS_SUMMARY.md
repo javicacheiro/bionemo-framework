@@ -393,9 +393,14 @@ upper-bound: feasible on B300/Blackwell (§4c), out of memory-reach on H200.
 (−2.5→−7.9%); **token-reweighting BACKFIRED** (overfit the tiny 1574-record set). Root cause =
 under-representation + genuine difficulty; needs *more unique dsRNA data*, not reweighting or more steps.
 
-**E. Does PPL translate downstream?**
-- All gains are PPL-only. Add a functional eval (variant-effect / zero-shot, cf. the `zeroshot_brca1`
-  notebook adapted to viral tasks) to check the −17% PPL actually buys downstream performance.
+**E. Does PPL translate downstream? — ✅ YES (see `DOWNSTREAM_EVAL.md`).**
+- Zero-shot variant-effect prediction on the **Starr 2020 SARS-CoV-2 RBD deep-mutational scan** (3,819
+  variants, experimental ACE2-binding + expression), scoring Δlog-likelihood of ref-vs-variant 8192-bp
+  windows. **Base Evo2 = no signal** (Spearman ≈ 0, all n.s.; AUROC ≈ 0.5). **Best LoRA (−25.44%) =
+  Spearman 0.35–0.44 (p as low as 1e-122), AUROC 0.66–0.72**, consistent across binding+expression,
+  strongest on single-nt variants. → **The PPL gain buys genuine downstream variant-effect capability
+  the base entirely lacks** — the study's strongest external validation. Follow-up: influenza HA DMS
+  for generality; add seeds/CIs.
 
 **F. Efficiency**
 - 20B is the price/perf winner; 40B not worth it. If deploying, quantify 20B@3000 inference cost and
