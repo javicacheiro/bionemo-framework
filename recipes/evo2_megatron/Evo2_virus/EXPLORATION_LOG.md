@@ -225,6 +225,20 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
   LR-driven (sustained high LR) or α-fundamental? If gentler LR rescues α1024@3000 → 40B just needs a
   lower LR for longer training (and may beat α512). `lora_run_40b_a1024_3k_lr15`.
 
+## Phase 13 — B1: Arc-vs-NVIDIA 40B checkpoint (H200, vortex-FP8) [2 nodes]
+Is the 40B "fragility" (α1024@3000 diverges) intrinsic or Arc-checkpoint-specific? Transferred the
+NVIDIA (NeMo2) 40B mbridge to the H200s (B300→local→ohio via the claude-h200 key, authorized) and ran
+the same configs the Arc (Savanna) 40B used.
+- **NVIDIA-40B α1024×3000 (local) = HEALTHY → −24.14%** (base 3.587→2.721; in-train val 2.55→2.47 dropping).
+  **The Arc-40B at the IDENTICAL config DIVERGED (val ~3.9).** → **The 40B fragility is Arc-checkpoint-
+  specific, NOT architectural.** `lora_run_40b_nvH_a1024_3k`.
+- NVIDIA-40B −24.14% (α1024) also EDGES Arc's best (α768 −23.95%) and nearly matches the 20B (−24.33%).
+  The NVIDIA checkpoint is both **more robust AND slightly better** for viral LoRA.
+- **ohio (RUNNING): NVIDIA-40B α768×3000** — identical-config head-to-head vs Arc α768 (−23.95%). `lora_run_40b_nvH_a768_3k`.
+- **local (RUNNING): NVIDIA-40B α1536×3000** — push the NVIDIA α ceiling: it's stable at α1024 (Arc/20B
+  weren't past ~1024); does α1536 stay healthy and finally beat the 20B (−24.33%)? `lora_run_40b_nvH_a1536_3k`.
+(B300 left off-limits throughout — busy with another agent's job.)
+
 ## Phase 12 — context-length revisit at BEST config (dim256×α1024×do0.2, 20B) [2 H200 nodes]
 Re-asked §3's "does long context help" at HIGH capacity (dim16 → dim256). Trained 32k-best (local,
 3000 steps, TP2, val 2.406) and 128k-best (ohio, 1000 steps, TP4). Scored uncapped length-stratified

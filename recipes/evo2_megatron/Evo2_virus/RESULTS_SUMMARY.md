@@ -326,6 +326,14 @@ match the Arc-40B/Hopper result? **Yes — and it's faster and simpler.**
 5. **Full (non-LoRA) 40B fine-tune is feasible on B300** (H200's 143 GB cannot): TP4/DP2 smoke ran
    0 NaN at ~14.5 s/step using only ~145/268 GB. Details: `LOG_B300_blackwell.md`.
 
+**Arc vs NVIDIA 40B checkpoint (B1, H200, vortex-FP8, identical recipe):** the earlier "40B is
+extremely fragile" finding was **checkpoint-specific**. The **NVIDIA (NeMo2) 40B trains cleanly at
+α1024×3000 → −24.14%** (val 2.47), whereas the **Arc (Savanna) 40B at the identical config DIVERGED**
+(val ~3.9). NVIDIA also edges Arc's best (α768, −23.95%) and nearly matches the 20B (−24.33%). So the
+NVIDIA checkpoint is **both more robust and slightly better** for viral LoRA — the Arc-40B's fragility
+(and its poor showing vs the 20B) was partly an artifact of the Savanna→MBridge/Hopper-FP8 checkpoint,
+not the 40B architecture. (Same-config α768 head-to-head + higher-α ceiling probe in progress.)
+
 ---
 
 ## 5. Engineering / feasibility (measured)
