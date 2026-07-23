@@ -336,7 +336,10 @@ extremely fragile" finding was **checkpoint-specific**. The **NVIDIA (NeMo2) 40B
 (val ~3.9). NVIDIA also edges Arc's best (α768, −23.95%) and nearly matches the 20B (−24.33%). So the
 NVIDIA checkpoint is **both more robust and slightly better** for viral LoRA — the Arc-40B's fragility
 (and its poor showing vs the 20B) was partly an artifact of the Savanna→MBridge/Hopper-FP8 checkpoint,
-not the 40B architecture. (Same-config α768 head-to-head + higher-α ceiling probe in progress.)
+not the 40B architecture. **Identical-config head-to-head confirms it: NVIDIA α768 = −24.10% vs Arc
+α768 = −23.95% (+0.15 pp);** NVIDIA is also usable at α1024 (−24.14%) where Arc diverges. Both share the
+~α1024 ceiling (α1536 explodes) and both ≈ the 20B (−24.33%), neither beats it — **20B stays the sweet
+spot**, but the NVIDIA checkpoint is the better 40B base (slightly higher gain + more robust).
 
 ---
 

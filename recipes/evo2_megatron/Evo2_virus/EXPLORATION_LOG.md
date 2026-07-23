@@ -248,7 +248,14 @@ the same configs the Arc (Savanna) 40B used.
   specific, NOT architectural.** `lora_run_40b_nvH_a1024_3k`.
 - NVIDIA-40B −24.14% (α1024) also EDGES Arc's best (α768 −23.95%) and nearly matches the 20B (−24.33%).
   The NVIDIA checkpoint is both **more robust AND slightly better** for viral LoRA.
-- **ohio (RUNNING): NVIDIA-40B α768×3000** — identical-config head-to-head vs Arc α768 (−23.95%). `lora_run_40b_nvH_a768_3k`.
+- **ohio DONE: NVIDIA-40B α768×3000 = −24.10%** (base 3.5865→2.7220; val 2.559). **Identical-config
+  head-to-head: NVIDIA −24.10% > Arc −23.95% (+0.15pp).** So at the SAME config the NVIDIA checkpoint is
+  marginally better; plus it's stable at α1024 (−24.14%) where Arc diverges. `lora_run_40b_nvH_a768_3k`.
+
+### B1 FINAL: NVIDIA (NeMo2) 40B is consistently slightly better AND more robust than Arc (Savanna) 40B
+— same-config α768: −24.10% vs −23.95%; NVIDIA usable at α1024 (−24.14%, Arc diverges there). Both share
+the ~α1024 ceiling (α1536 explodes) and both ≈ the 20B (−24.33%), neither beats it. **20B remains the
+price/perf sweet spot.** The Arc-40B's earlier fragility/underperformance was partly a checkpoint artifact.
 - **local DONE: NVIDIA-40B α1536×3000 = DIVERGED** (step-250 val 498.7, explosive). So the NVIDIA
   checkpoint, while stable at α1024 (Arc diverged there), STILL has a ceiling ~α1024 — α1536 explodes.
   → **NVIDIA-40B best = α1024 (−24.14%), nearly matches but does NOT beat the 20B (−24.33%).**
