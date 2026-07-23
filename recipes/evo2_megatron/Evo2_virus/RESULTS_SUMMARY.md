@@ -417,8 +417,12 @@ under-representation + genuine difficulty; needs *more unique dsRNA data*, not r
   windows. **Base Evo2 = no signal** (Spearman ≈ 0, all n.s.; AUROC ≈ 0.5). **Best LoRA (−25.44%) =
   Spearman 0.35–0.44 (p as low as 1e-122), AUROC 0.66–0.72**, consistent across binding+expression,
   strongest on single-nt variants. → **The PPL gain buys genuine downstream variant-effect capability
-  the base entirely lacks** — the study's strongest external validation. Follow-up: influenza HA DMS
-  for generality; add seeds/CIs.
+  the base entirely lacks** — the study's strongest external validation.
+- **Generality (influenza HA DMS, `DOWNSTREAM_HA_EVAL.md`): transfers to a 2nd virus family, weaker.**
+  On both HA strains the LoRA beats base (all significant): **H1N1 (WSN) Spearman 0.10→0.29, AUROC
+  0.54→0.65; H3N2 (Perth) −0.01→0.10, AUROC 0.49→0.55**. Magnitude decays with divergence: SARS-CoV-2
+  RBD (0.37–0.44) > H1N1 (0.29) > H3N2 (0.10). So the downstream gain is **real and transferable, not a
+  single-virus artifact — but virus-dependent, not uniformly large.** Add seeds/CIs.
 
 **F. Efficiency**
 - 20B is the price/perf winner; 40B not worth it. If deploying, quantify 20B@3000 inference cost and

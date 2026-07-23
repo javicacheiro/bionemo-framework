@@ -28,6 +28,7 @@
 !/RESULTS_SUMMARY.md
 !/LEAKAGE_AUDIT.md
 !/DOWNSTREAM_EVAL.md
+!/DOWNSTREAM_HA_EVAL.md
 !/EXPLORATION_LOG.md
 !/RESULTS_uncapped_bylen.txt
 !/analysis/

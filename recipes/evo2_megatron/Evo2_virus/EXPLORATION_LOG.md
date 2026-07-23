@@ -225,6 +225,18 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
   LR-driven (sustained high LR) or α-fundamental? If gentler LR rescues α1024@3000 → 40B just needs a
   lower LR for longer training (and may beat α512). `lora_run_40b_a1024_3k_lr15`.
 
+## Phase 14 — downstream generality (influenza HA) + B300 full fine-tune [3 nodes]
+- **Influenza HA DMS generality (local, `DOWNSTREAM_HA_EVAL.md`):** the SARS-CoV-2 downstream edge
+  TRANSFERS to a 2nd virus family, weaker. LoRA beats base on both strains (all significant):
+  **H1N1(WSN) Spearman 0.10→0.29, AUROC 0.54→0.65; H3N2(Perth) −0.01→0.10, AUROC 0.49→0.55.** Magnitude
+  decays with divergence: SARS-CoV-2 RBD 0.37–0.44 > H1N1 0.29 > H3N2 0.10. → Real, transferable gain
+  (not single-virus), but virus-dependent, not uniformly large.
+- **B300 full 40B fine-tune (GPUs 1-4, bf16, no LoRA, lr 2e-6, 1000 steps):** in-train val bottomed
+  ~3.09 (step 800) then ROSE (3.11→3.13) = mild overfit knee. Improves over base (~3.6) but FAR worse
+  than LoRA (val ~2.4–2.5). → **Full fine-tuning is the WRONG tool for this 86M-token corpus** — it
+  underperforms LoRA badly and overfits; LoRA (small adapter) is right for a small corpus. Capped % pending.
+  (GPU0 = another agent's vLLM, untouched throughout.) `fullft_40b_nv_b300`.
+
 ## Phase 13 — B1: Arc-vs-NVIDIA 40B checkpoint (H200, vortex-FP8) [2 nodes]
 Is the 40B "fragility" (α1024@3000 diverges) intrinsic or Arc-checkpoint-specific? Transferred the
 NVIDIA (NeMo2) 40B mbridge to the H200s (B300→local→ohio via the claude-h200 key, authorized) and ran
