@@ -324,7 +324,11 @@ match the Arc-40B/Hopper result? **Yes — and it's faster and simpler.**
 4. **~2× faster, simpler parallelism:** frozen 40B (~80 GB) fits one 268 GB card → TP1/pure-DP8 instead
    of Hopper's TP4; ~11 s/step & 688 TFLOP/s vs 23.4 s/step & ~320.
 5. **Full (non-LoRA) 40B fine-tune is feasible on B300** (H200's 143 GB cannot): TP4/DP2 smoke ran
-   0 NaN at ~14.5 s/step using only ~145/268 GB. Details: `LOG_B300_blackwell.md`.
+   0 NaN at ~14.5 s/step using only ~145/268 GB. Details: `LOG_B300_blackwell.md`. **But it's the WRONG
+   tool for this small corpus:** a real full-FT run (NVIDIA-40B, 1000 steps, lr 2e-6) = **−11.20%** —
+   *worse* than even the dim16 LoRA baseline (−13.51%) and <½ the LoRA best (−25.44%), with an overfit
+   knee (val bottomed ~3.09 then rose). On an 86M-token corpus, LoRA (small adapter) decisively beats
+   updating all 40B params. LoRA is the right tool; the full-FT "upper bound" is actually a floor.
 
 **Arc vs NVIDIA 40B checkpoint (B1, H200, vortex-FP8, identical recipe):** the earlier "40B is
 extremely fragile" finding was **checkpoint-specific**. The **NVIDIA (NeMo2) 40B trains cleanly at

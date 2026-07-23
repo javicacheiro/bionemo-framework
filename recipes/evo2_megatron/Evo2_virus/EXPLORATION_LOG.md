@@ -234,7 +234,9 @@ tuned per scale and capped ~α1024; be MORE conservative on bigger models** (opp
 - **B300 full 40B fine-tune (GPUs 1-4, bf16, no LoRA, lr 2e-6, 1000 steps):** in-train val bottomed
   ~3.09 (step 800) then ROSE (3.11→3.13) = mild overfit knee. Improves over base (~3.6) but FAR worse
   than LoRA (val ~2.4–2.5). → **Full fine-tuning is the WRONG tool for this 86M-token corpus** — it
-  underperforms LoRA badly and overfits; LoRA (small adapter) is right for a small corpus. Capped % pending.
+  underperforms LoRA badly and overfits; LoRA (small adapter) is right for a small corpus.
+  **Capped: −11.20%** (base 3.647→3.239) — WORSE than even the dim16 LoRA baseline (−13.51%) and <½ the
+  LoRA best (−25.44%). Full-FT is decisively the wrong tool for the 86M-token corpus.
   (GPU0 = another agent's vLLM, untouched throughout.) `fullft_40b_nv_b300`.
 
 ## Phase 13 — B1: Arc-vs-NVIDIA 40B checkpoint (H200, vortex-FP8) [2 nodes]
