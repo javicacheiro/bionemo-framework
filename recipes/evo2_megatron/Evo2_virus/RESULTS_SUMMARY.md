@@ -448,7 +448,7 @@ under-representation + genuine difficulty; needs *more unique dsRNA data*, not r
 | 40B @16k@3k | `lora_run_40b_16k_3k/.../iter_0003000` | `...-3k` (`z2y3z951`) |
 | 20B @32k@3k | `lora_run_20b_32k_3k/.../iter_0003000` | `viral-lora-20b-seq32768-vfp8-3k` (`pw1y5ab6`) |
 | 20B @128k@1k | `lora_run_20b_128k_1k/.../iter_0001000` | `viral-lora-20b-seq131072-vfp8-1k` (`ls97x5b1`) |
-| 20B @128k@3k | `lora_run_20b_128k_3k/` (running) | `viral-lora-20b-seq131072-vfp8-3k` |
+| 20B @128k@3k | `lora_run_20b_128k_3k/.../iter_0003000` | `viral-lora-20b-seq131072-vfp8-3k` (`ogu9hmrb`) |
 
 Source logs: `Evo2_virus/LOG_evo2_{7b_8k,20b,40b,longer_3000steps,context_ablation}.md`; commands in
 `Evo2_virus/COMMANDS.sh`.

@@ -265,7 +265,7 @@ price/perf sweet spot.** The Arc-40B's earlier fragility/underperformance was pa
 where Arc diverged) and slightly better (−24.14% vs Arc's −23.95%), but it has the same ~α1024 ceiling
 (α1536 explodes) and still does not surpass the 20B (−24.33%). **20B remains the price/perf sweet spot;**
 the Arc-40B's earlier fragility was partly a checkpoint artifact, but even the better NVIDIA-40B ≈ 20B, not >.
-Remaining: ohio NVIDIA α768 (same-config vs Arc −23.95%) for the clean identical-config checkpoint delta.
+Identical-config delta now closed: ohio NVIDIA α768 = −24.10% vs Arc α768 = −23.95% (+0.15 pp) — see B1 FINAL above.
 
 ## Phase 12 — context-length revisit at BEST config (dim256×α1024×do0.2, 20B) [2 H200 nodes]
 Re-asked §3's "does long context help" at HIGH capacity (dim16 → dim256). Trained 32k-best (local,
