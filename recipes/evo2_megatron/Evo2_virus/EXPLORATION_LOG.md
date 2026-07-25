@@ -394,3 +394,26 @@ at ~127 GB/GPU).
   LESSON: killing a torchrun job needs a **process-group kill** — `pkill -f` orphans the workers
   (they hold GPU mem in Rsl state); use `for g in $(ps -eo pgid,cmd|grep bin/train_evo2|awk '{print $1}'|sort -u); do kill -9 -$g; done`.
   Monitors: local → bvcozwv5n (dim-256); ohio → waiter b1rgagnu2 (dim-8 then re-arm for dim-128).
+
+## Phase 14 — reverse-complement (RC) augmentation [2 H200 nodes, 2026-07-24/25]
+The prior dsRNA lever (token-reweighting) BACKFIRED (+5.28%, memorised the tiny 1574-record set).
+The writeup's own conclusion was "needs **more unique dsRNA data**, not reweighting." Untried lever:
+**reverse-complement augmentation** — the opposite strand read 5'->3' is a biologically valid, DISTINCT
+example (IUPAC-aware RC via `/data/viral/rc_augment.py`; palindrome + ambiguity-code self-tests pass).
+Two complementary runs, both 20B dim256xa1024 seq16384 vortex-FP8, vs the standard capped-8192 base
+(base 3.579), scored per-genome.
+
+- **local: dsRNA-only RC-doubling** (add RC of the 1574 dsRNA recs -> corpus 12944->14518; dsRNA unique
+  windows 2x, no artificial reweight). do0.2 x3k = **OVERALL -24.28% (== baseline -24.33%), dsRNA -8.28%**,
+  cov 94.4%. dsRNA BEATS every plain-3k baseline (do0.1 -7.87%, do0.2/do0.3 ~-7.67%) at ZERO overall cost.
+  KEY: RC augmentation (real unique data) HELPS dsRNA where reweighting (repetition) hurt it — validates
+  the "more unique data" hypothesis. `lora_run_20b_16k_dsRNArc_d256a1024do2_3k`, `viral_dataset_dsRNArc.yaml`.
+- **ohio: whole-corpus RC-doubling** (all 12944 recs + their RC -> 25888). do0.2 x3k = OVERALL -22.40%
+  (< baseline -24.33%) but **cov 97.0%** (highest of any 3k run). UNDERFIT-but-broader: doubling the corpus
+  halves epochs/step, so at a fixed 3k budget each window is fit less (broad, shallow). `..._fullrc_...`.
+
+Follow-ups (running, ~15h each, results ~2026-07-25 PM):
+- local: dsRNA-RC at CHAMPION config **do0.3 x6k** — best shot at beating -25.44% overall AND pushing
+  dsRNA past the -9.69% (plain do0.3x6k) / -9.78% (plain do0.2x6k) ceiling.
+- ohio: whole-corpus RC **do0.2 x6k** — same-compute vs plain do0.2x6k (-24.96%): does the extra unique
+  data recover/surpass the plain run at matched steps, or does 2x-data underfit persist?
