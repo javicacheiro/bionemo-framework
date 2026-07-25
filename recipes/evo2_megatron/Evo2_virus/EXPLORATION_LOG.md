@@ -417,3 +417,21 @@ Follow-ups (running, ~15h each, results ~2026-07-25 PM):
   dsRNA past the -9.69% (plain do0.3x6k) / -9.78% (plain do0.2x6k) ceiling.
 - ohio: whole-corpus RC **do0.2 x6k** — same-compute vs plain do0.2x6k (-24.96%): does the extra unique
   data recover/surpass the plain run at matched steps, or does 2x-data underfit persist?
+
+### Phase 14 — 6k results + conclusion (2026-07-25)
+- **local: dsRNA-RC do0.3 x6k = NEW BEST -> OVERALL -25.51% (>= champion -25.44%), dsRNA -10.02%** (first
+  sub--10%, vs plain champion -9.69%), cov 94.1%, in-train val PPL 2.489. Targeted RC of the thin class
+  improves dsRNA at zero overall cost (+12% data, same compute). `lora_run_20b_16k_dsRNArc_d256a1024do3_6k`.
+- **ohio: whole-corpus RC do0.2 x6k = -24.21%** (< plain-6k do0.2 -24.96%), dsRNA -6.56%, cov 96.5%.
+  Confirms the underfit diagnosis: 2x corpus at 6k ~= 9 epochs ~= plain-3k (-24.33%). Matching plain-6k
+  epochs needs ~12k steps (~30h) -> not worth it. Whole-corpus RC = broad-not-deep; NEGATIVE for the mean.
+- CONCLUSION: **targeted RC (add unique strands only where the corpus is thin) is the right form of RC**;
+  whole-corpus doubling only dilutes epochs. dsRNA-RC is a free recipe add-on (dsRNA -9.69->-10.02%).
+- Round 3 (running, 2026-07-25 PM): does RC-doubled unique dsRNA now RESCUE token-upweighting (which
+  backfired at +5.28% with 1x unique data)? local = dsRNAboth upweight->10%, ohio = ->6%, both do0.3x6k.
+- OPEN (proposed code change, left for user review): no train-time per-epoch RC exists (both preprocess
+  flags are static: `random_reverse_complement` bakes one fixed flip, `embed_reverse_complement` doubles
+  on disk). A ~20-line stochastic RC in `Evo2Dataset` (byte-level tokenizer -> clean complement LUT
+  65<->84, 67<->71, +lowercase/ambiguity, reversed) would give per-epoch RC WITHOUT corpus-doubling /
+  epoch-dilution -- the theoretically cleanest win, but it touches the training data path (label/loss-mask
+  alignment) so it needs a smoke test, not a blind overnight edit.

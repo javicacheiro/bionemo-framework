@@ -237,6 +237,13 @@ almost all the benefit;** attn/mixer projections add only ~0.4 pp. Put capacity 
    — capacity is the only lever that moved the outlier. But **token-reweighting dsRNA BACKFIRED**
    (upweight to 10% of tokens → held-out dsRNA got *worse*, +5.28%: LoRA memorised the tiny 1574-record
    set over ~19 epochs). dsRNA needs *more unique data*, not reweighting.
+   **-> Reverse-complement augmentation delivers that (Phase 14, 2026-07-25):** adding the RC of the 1574
+   dsRNA records (a biologically valid, DISTINCT strand -> doubles unique dsRNA windows) at the champion
+   config (dim256xa1024xdo0.3x6k) gives **dsRNA -10.02%** (first time past -10%, vs -9.69% plain) with
+   **overall -25.51% ~= the -25.44% champion (within noise), at +12% data / same compute.** RC (real unique
+   data) HELPS where reweighting (repetition) hurt -- confirming the "more unique data" diagnosis. Whole-
+   corpus RC-doubling instead underfits at a fixed step budget (halves epochs/step: -24.21% @6k, broad
+   96.5% coverage) and is not worth it. **Targeted RC of the thin class is a free add-on to the recipe.**
 5. **α-cliff is sharp and just above 1024**, and **fundamental** (not under-regularization): α1024
    −23.37% → α1536 **+0.19%** → α2048 +4.97% (all dropout 0.1); dropout 0.3 does **not** rescue α2048
    (+5.35%). Stay at α ≤ ~1024 unless adding dropout (see 7).
