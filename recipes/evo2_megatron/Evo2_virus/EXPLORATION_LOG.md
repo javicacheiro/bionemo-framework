@@ -472,3 +472,30 @@ is not the whole story -- dsRNA-focused upweighting can hurt downstream generali
 NEXT: score natural-RC (dsRNArc, no upweight, dsRNA -10.02%) downstream -- does RC WITHOUT upweight keep
 the dsRNA PPL gain WITHOUT the ssRNA(+) downstream cost? (That would make natural-RC the clean recipe add-on.)
 `downstream_results_up6.json`.
+
+### Phase 14 — DECISIVE: RC helps PPL but NOT downstream (PPL-orthogonal) (2026-07-26)
+Scored natural-RC (dsRNArc, no upweight, dsRNA -10.02%) on the SARS-CoV-2 RBD DMS (ssRNA(+)) task:
+| metric | base | plain -25.44% | up6 | natural-RC |
+|---|---|---|---|---|
+| Spearman bind (all) | -0.012 | 0.368 | 0.325 | 0.295 |
+| Spearman expr (all) | 0.004 | 0.351 | 0.347 | 0.269 |
+| AUROC bind (all) | 0.473 | 0.659 | 0.635 | 0.631 |
+| AUROC expr (all) | 0.498 | 0.690 | 0.678 | 0.646 |
+BOTH RC adapters are WORSE downstream than the PLAIN champion; upweighting is not the cause (natural-RC,
+which upweights LEAST, is the worst). THE KEY: natural-RC and plain have **IDENTICAL ssRNA(+) held-out PPL**
+(-21.53% vs -21.54%) yet natural-RC scores far lower downstream (0.295 vs 0.368) -> the regression is
+**ORTHOGONAL to PPL**. Mechanistic read: RC training teaches strand-INVARIANCE, diluting the directional
+sensitivity that single-nt variant-effect scoring needs. **Held-out PPL (even per-class) is NOT a
+sufficient proxy for downstream utility.** Caveat: single-seed downstream runs; gap is ~4 sampling-SE +
+a training-seed component, but consistent across 8 metrics x 3 adapters.
+
+### RC AUGMENTATION — FINAL VERDICT
+- **In-distribution PPL:** RC is a real win. Targeted dsRNA-RC + light upweight -> dsRNA -9.69%->-13.13%,
+  aggregate -25.44%->-25.74%. Whole-corpus RC-doubling underfits (negative). Reweighting alone backfires
+  (+5.28%); RC rescues it (more UNIQUE data, not repetition).
+- **Downstream transfer:** RC does NOT help and mildly HURTS (PPL-orthogonal, above). So the RC PPL gain
+  is metric-local, not a generalization gain.
+- **RECOMMENDATION: keep the PLAIN champion (dim256xa1024xdo0.3x6k, -25.44%) as the production recipe --
+  it is the best downstream.** Use dsRNA-RC ONLY when in-distribution dsRNA likelihood is itself the
+  deliverable (dsRNA generation/scoring), never as a blanket upgrade, and document the downstream caveat.
+`downstream_results_natrc.json`.
