@@ -447,3 +447,10 @@ The reweight-backfire was a UNIQUE-DATA shortage, not a flaw in reweighting. Wit
 - local: dsRNAboth up15 (dsRNA->15%) do0.3x6k -- running (high-end bracket; ~4.6 dsRNA-epochs, testing
   where upweight re-breaks now that unique data is 2x).
 dsRNA ladder (do0.3x6k): plain -9.69% | RC-natural(~4.8%) -10.02% | RC+up10 **-13.13%** | up6/up15 pending.
+
+- **ohio: dsRNAboth up6 (dsRNA->6%) do0.3x6k = BEST OVERALL -> -25.74%**, dsRNA -11.79%, cov 93.8%.
+  Beats up10 (-25.56%) on overall and the prior champion (-25.44%) by +0.30pp (above noise).
+  TRADEOFF: **6% maximizes OVERALL (-25.74%), 10% maximizes dsRNA (-13.13%)** -- harder dsRNA upweight
+  helps dsRNA but slightly starves the other classes. `lora_run_20b_16k_dsRNAboth_up6_d256a1024do3_6k`.
+  dsRNA ladder (do0.3x6k): plain -9.69 | RC-nat -10.02 | up6 -11.79 | up10 **-13.13** | up15 pending.
+  overall ladder: champion -25.44 | RC-nat -25.51 | up10 -25.56 | **up6 -25.74** | up15 pending.
