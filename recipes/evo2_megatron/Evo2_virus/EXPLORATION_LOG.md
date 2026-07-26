@@ -454,3 +454,21 @@ dsRNA ladder (do0.3x6k): plain -9.69% | RC-natural(~4.8%) -10.02% | RC+up10 **-1
   helps dsRNA but slightly starves the other classes. `lora_run_20b_16k_dsRNAboth_up6_d256a1024do3_6k`.
   dsRNA ladder (do0.3x6k): plain -9.69 | RC-nat -10.02 | up6 -11.79 | up10 **-13.13** | up15 pending.
   overall ladder: champion -25.44 | RC-nat -25.51 | up10 -25.56 | **up6 -25.74** | up15 pending.
+
+### Phase 14 — DOWNSTREAM caveat: dsRNA-upweight trades ssRNA(+) transfer (2026-07-26)
+Scored up6 (best aggregate PPL, -25.74%) on the SARS-CoV-2 RBD DMS variant-effect benchmark (ssRNA(+))
+vs the old -25.44% plain adapter (same base, same analyze.py/all.fasta -- base numbers match to the digit):
+| metric | base | old -25.44% | up6 |
+|---|---|---|---|
+| Spearman bind (all) | -0.012 | 0.368 | 0.325 |
+| Spearman bind (single-nt) | 0.017 | 0.437 | 0.361 |
+| Spearman expr (all) | 0.004 | 0.351 | 0.347 |
+| AUROC bind (all) | 0.473 | 0.659 | 0.635 |
+| AUROC bind (single-nt) | 0.496 | 0.724 | 0.670 |
+up6 is WORSE than the plain adapter on 7/8 downstream metrics despite BETTER aggregate held-out PPL.
+INTERPRETATION: upweighting dsRNA (6% of sampling) diverts from the dominant ssRNA(+) class, so the
+aggregate-PPL win masks a per-class trade that shows up on the ssRNA(+) downstream task. **Aggregate PPL
+is not the whole story -- dsRNA-focused upweighting can hurt downstream generalization on other classes.**
+NEXT: score natural-RC (dsRNArc, no upweight, dsRNA -10.02%) downstream -- does RC WITHOUT upweight keep
+the dsRNA PPL gain WITHOUT the ssRNA(+) downstream cost? (That would make natural-RC the clean recipe add-on.)
+`downstream_results_up6.json`.
