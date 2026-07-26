@@ -83,3 +83,20 @@ python3 /data/viral/aggregate_ppl.py \
 #  * 20B is the price/perf sweet spot -- the 40B does NOT surpass it and is far more fragile.
 #  * 7B uses bf16 without vortex-FP8 and loads as --model-size evo2_7b_base (11008 MLP dim; evo2_7b errors).
 # =============================================================================
+#
+# OPTIONAL — dsRNA reverse-complement (RC) augmentation  [Phase 14; NOT part of the default recipe]
+# -----------------------------------------------------------------------------------------------
+# The dsRNA class is under-represented (2.45% of tokens, 1574 records) and stays the worst class
+# (~-10%). Adding the RC of the dsRNA records (a biologically valid, DISTINCT strand -> doubles unique
+# dsRNA windows), optionally upweighted, improves IN-DISTRIBUTION dsRNA/aggregate held-out PPL:
+#     dsRNA:   plain -9.69% -> RC-natural -10.02% -> RC + dsRNA-upweight-to-10% -13.13%
+#     overall: plain -25.44% -> RC-natural -25.51% -> RC + upweight-to-6% -25.74%
+#   (Reweighting WITHOUT RC backfires, +5.28% -- it memorises the tiny set; RC supplies real unique data.
+#    Whole-corpus RC-doubling underfits at fixed steps and is NOT worth it -- only augment the thin class.)
+# HOWEVER: downstream validation (SARS-CoV-2 RBD DMS, ssRNA(+)) shows this PPL gain does NOT transfer --
+# the PLAIN champion beats both RC adapters on variant-effect prediction (Spearman 0.368 vs 0.325/0.295),
+# and RC matches plain on ssRNA(+) held-out PPL yet scores lower downstream (regression ORTHOGONAL to PPL;
+# RC teaches strand-invariance, diluting directional sensitivity). => Use dsRNA-RC ONLY when in-distribution
+# dsRNA likelihood is itself the deliverable; keep the plain config above as the general recipe.
+# Pipeline: rc_augment.py (IUPAC-aware) -> preprocess_evo2 -> blend rest+dsRNA(both strands) in the dataset yaml.
+# =============================================================================

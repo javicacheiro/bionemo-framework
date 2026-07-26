@@ -243,7 +243,14 @@ almost all the benefit;** attn/mixer projections add only ~0.4 pp. Put capacity 
    **overall -25.51% ~= the -25.44% champion (within noise), at +12% data / same compute.** RC (real unique
    data) HELPS where reweighting (repetition) hurt -- confirming the "more unique data" diagnosis. Whole-
    corpus RC-doubling instead underfits at a fixed step budget (halves epochs/step: -24.21% @6k, broad
-   96.5% coverage) and is not worth it. **Targeted RC of the thin class is a free add-on to the recipe.**
+   96.5% coverage) and is not worth it. **BUT downstream validation (Phase 14, SARS-CoV-2 RBD DMS) shows
+   the RC PPL gain does NOT transfer:** the plain champion beats both RC adapters on the ssRNA(+) variant-
+   effect task (Spearman bind 0.368 vs up6 0.325 vs natural-RC 0.295), and natural-RC matches the plain
+   champion's ssRNA(+) *held-out PPL* exactly (-21.53 vs -21.54%) yet scores far lower downstream -> the
+   regression is **orthogonal to PPL** (RC teaches strand-invariance, diluting variant-effect directional
+   sensitivity). **Net: keep the plain champion (-25.44%) as the production recipe; use dsRNA-RC only when
+   in-distribution dsRNA likelihood is itself the goal, not as a general upgrade.** Held-out PPL is not a
+   sufficient downstream proxy. (Single-seed downstream caveat; effect consistent across 8 metrics.)
 5. **α-cliff is sharp and just above 1024**, and **fundamental** (not under-regularization): α1024
    −23.37% → α1536 **+0.19%** → α2048 +4.97% (all dropout 0.1); dropout 0.3 does **not** rescue α2048
    (+5.35%). Stay at α ≤ ~1024 unless adding dropout (see 7).
