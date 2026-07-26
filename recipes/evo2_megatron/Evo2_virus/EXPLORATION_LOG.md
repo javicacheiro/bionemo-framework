@@ -435,3 +435,15 @@ Follow-ups (running, ~15h each, results ~2026-07-25 PM):
   65<->84, 67<->71, +lowercase/ambiguity, reversed) would give per-epoch RC WITHOUT corpus-doubling /
   epoch-dilution -- the theoretically cleanest win, but it touches the training data path (label/loss-mask
   alignment) so it needs a smoke test, not a blind overnight edit.
+
+### Phase 14 — Round 3: RC RESCUES upweighting (2026-07-26)
+The reweight-backfire was a UNIQUE-DATA shortage, not a flaw in reweighting. With dsRNA RC-doubled
+(3148 unique windows via both strands), upweighting no longer memorises:
+- **local: dsRNAboth up10 (dsRNA->10% tokens) do0.3x6k = NEW BEST -> OVERALL -25.56%, dsRNA -13.13%**,
+  cov 93.1%. vs the FAILED 1x-unique up10 (dsRNA +5.28%): RC-doubling flips a +5.28% backfire into a
+  -13.13% gain at the SAME 10% sampling rate. dsRNA jumps -10.02% (natural RC) -> -13.13% (RC+up10).
+  `lora_run_20b_16k_dsRNAboth_up10_d256a1024do3_6k`.
+- ohio: dsRNAboth up6 (dsRNA->6%) do0.3x6k -- running (low-end bracket).
+- local: dsRNAboth up15 (dsRNA->15%) do0.3x6k -- running (high-end bracket; ~4.6 dsRNA-epochs, testing
+  where upweight re-breaks now that unique data is 2x).
+dsRNA ladder (do0.3x6k): plain -9.69% | RC-natural(~4.8%) -10.02% | RC+up10 **-13.13%** | up6/up15 pending.
