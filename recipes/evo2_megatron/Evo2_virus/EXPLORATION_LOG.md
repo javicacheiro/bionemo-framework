@@ -499,3 +499,17 @@ a training-seed component, but consistent across 8 metrics x 3 adapters.
   it is the best downstream.** Use dsRNA-RC ONLY when in-distribution dsRNA likelihood is itself the
   deliverable (dsRNA generation/scoring), never as a blanket upgrade, and document the downstream caveat.
 `downstream_results_natrc.json`.
+
+### Phase 14 — upweight bracket complete (up15, 2026-07-27)
+- **local: dsRNAboth up15 (dsRNA->15%) do0.3x6k = -25.33% overall (BELOW plain -25.44%!), dsRNA -13.43%**,
+  cov 94.3%. Completes the bracket:
+  | dsRNA upweight | overall | dsRNA |
+  |---|---|---|
+  | natural ~4.8% | -25.51% | -10.02% |
+  | up6 | **-25.74%** (overall peak) | -11.79% |
+  | up10 | -25.56% | -13.13% |
+  | up15 | -25.33% (< plain -25.44%) | -13.43% (dsRNA saturates) |
+  PATTERN: overall peaks ~6% then declines (heavy dsRNA upweight starves the other classes -> up15 drops
+  below the plain champion); dsRNA improves monotonically but SATURATES ~-13.4% by up10-15 (only 3148
+  unique dsRNA windows even with RC). Confirms up6 = overall-optimal upweight; and that (with the downstream
+  caveat) aggressive dsRNA upweighting is counterproductive for generalization. **RC study CLOSED.**
