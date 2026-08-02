@@ -96,7 +96,7 @@ python3 /data/viral/aggregate_ppl.py \
 # HOWEVER: downstream validation (SARS-CoV-2 RBD DMS, ssRNA(+)) shows this PPL gain does NOT transfer --
 # the PLAIN champion beats both RC adapters on variant-effect prediction (Spearman 0.368 vs 0.325/0.295),
 # and RC matches plain on ssRNA(+) held-out PPL yet scores lower downstream (regression ORTHOGONAL to PPL;
-# RC teaches strand-invariance, diluting directional sensitivity). => Use dsRNA-RC ONLY when in-distribution
+# effect is NOT RC-specific -- see Phase 15: over-optimizing held-out PPL hurts downstream generally). => Use dsRNA-RC ONLY when in-distribution
 # dsRNA likelihood is itself the deliverable; keep the plain config above as the general recipe.
 # Pipeline: rc_augment.py (IUPAC-aware) -> preprocess_evo2 -> blend rest+dsRNA(both strands) in the dataset yaml.
 # =============================================================================

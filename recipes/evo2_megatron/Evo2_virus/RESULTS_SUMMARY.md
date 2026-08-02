@@ -247,8 +247,9 @@ almost all the benefit;** attn/mixer projections add only ~0.4 pp. Put capacity 
    the RC PPL gain does NOT transfer:** the plain champion beats both RC adapters on the ssRNA(+) variant-
    effect task (Spearman bind 0.368 vs up6 0.325 vs natural-RC 0.295), and natural-RC matches the plain
    champion's ssRNA(+) *held-out PPL* exactly (-21.53 vs -21.54%) yet scores far lower downstream -> the
-   regression is **orthogonal to PPL** (RC teaches strand-invariance, diluting variant-effect directional
-   sensitivity). **Net: keep the plain champion (-25.44%) as the production recipe; use dsRNA-RC only when
+   regression is **orthogonal to PPL**. (A proposed "RC teaches strand-invariance" mechanism was later
+   TESTED and REFUTED in Phase 15 -- RC adapters are not more strand-symmetric; the effect is not even
+   RC-specific: over-optimizing held-out PPL hurts downstream generally. See Phase 15.) **Net: keep the plain champion (-25.44%) as the production recipe; use dsRNA-RC only when
    in-distribution dsRNA likelihood is itself the goal, not as a general upgrade.** Held-out PPL is not a
    sufficient downstream proxy. (Single-seed downstream caveat; effect consistent across 8 metrics.)
 5. **α-cliff is sharp and just above 1024**, and **fundamental** (not under-regularization): α1024

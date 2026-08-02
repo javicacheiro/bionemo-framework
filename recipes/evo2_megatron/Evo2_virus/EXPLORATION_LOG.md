@@ -484,9 +484,9 @@ Scored natural-RC (dsRNArc, no upweight, dsRNA -10.02%) on the SARS-CoV-2 RBD DM
 BOTH RC adapters are WORSE downstream than the PLAIN champion; upweighting is not the cause (natural-RC,
 which upweights LEAST, is the worst). THE KEY: natural-RC and plain have **IDENTICAL ssRNA(+) held-out PPL**
 (-21.53% vs -21.54%) yet natural-RC scores far lower downstream (0.295 vs 0.368) -> the regression is
-**ORTHOGONAL to PPL**. Mechanistic read: RC training teaches strand-INVARIANCE, diluting the directional
-sensitivity that single-nt variant-effect scoring needs. **Held-out PPL (even per-class) is NOT a
-sufficient proxy for downstream utility.** Caveat: single-seed downstream runs; gap is ~4 sampling-SE +
+**ORTHOGONAL to PPL** (natural-RC == plain on ssRNA(+) PPL yet worse downstream). (A "RC teaches
+strand-invariance" guess was made here and LATER REFUTED in Phase 15.) **Held-out PPL (even per-class)
+is NOT a sufficient proxy for downstream utility.** Caveat: single-seed downstream runs; gap is ~4 sampling-SE +
 a training-seed component, but consistent across 8 metrics x 3 adapters.
 
 ### RC AUGMENTATION — FINAL VERDICT
@@ -513,3 +513,44 @@ a training-seed component, but consistent across 8 metrics x 3 adapters.
   below the plain champion); dsRNA improves monotonically but SATURATES ~-13.4% by up10-15 (only 3148
   unique dsRNA windows even with RC). Confirms up6 = overall-optimal upweight; and that (with the downstream
   caveat) aggressive dsRNA upweighting is counterproductive for generalization. **RC study CLOSED.**
+
+## Phase 15 — PPL vs downstream QUANTIFIED + mechanism tested (2026-08-02) [2 H200 nodes]
+Scored 11 adapters on the SARS-CoV-2 RBD DMS variant-effect task (ssRNA(+)); held-out PPL from the
+per-genome capped scores. Downstream = Spearman(evo2_delta, DMS bind_avg, all 3802 muts):
+| adapter | held-out PPL | ds Spearman | ds AUROC | family |
+|---|---:|---:|---:|---|
+| dim64 do0.1x3k | -20.09% | 0.329 | 0.646 | plain |
+| dim256 do0.1x3k | -21.29% | 0.394 | 0.676 | plain |
+| **dim256_a1024 do0.1x3k** | -23.48% | **0.415** | 0.684 | plain (BEST downstream) |
+| do0.3x3k | -24.28% | 0.385 | 0.668 | plain |
+| do0.2x6k | -24.96% | 0.376 | 0.684 | plain |
+| CHAMPION do0.3x6k | -25.44% | 0.368 | 0.659 | plain |
+| fullrc do0.2x6k | -24.21% | 0.329 | 0.652 | RC |
+| up15 | -25.33% | 0.355 | 0.647 | RC |
+| natRC | -25.51% | 0.295 | 0.631 | RC |
+| up10 | -25.56% | 0.343 | 0.651 | RC |
+| up6 | -25.74% | 0.325 | 0.635 | RC |
+
+corr(held-out-PPL magnitude, downstream Spearman): **ALL 11 rho=-0.50; PLAIN past the -23.5% peak
+(n=4) rho=-1.00** (perfectly monotonic decline). **BEST downstream = dim256_a1024 do0.1x3k (0.415), a
+LIGHTLY-trained adapter -- the PPL champion (-25.44%) scores only 0.368.** Every PPL-lowering lever we
+used (more steps, higher dropout, RC augmentation) HURT downstream past the peak.
+**HEADLINE (strong form): in the well-trained regime, held-out PPL and zero-shot variant-effect are
+ANTI-CORRELATED.** For downstream transfer, do NOT minimize corpus PPL -- a light adapter transfers best.
+
+MECHANISM TESTED + **REFUTED**: hypothesis was "RC teaches strand-invariance -> dilutes directional
+sensitivity." Strand-symmetry probe = correlation of an adapter's per-window logprob(seq) vs
+logprob(reverse-complement(seq)) over the 4020 DMS windows:
+| adapter | pearson(fwd,rc) | mean|fwd-rc| |
+|---|---:|---:|
+| champion (plain) | -0.259 | 0.911 |
+| natRC | -0.304 | 0.903 |
+| up6 | -0.019 | 0.863 |
+ALL adapters stay strongly strand-ASYMMETRIC; RC did NOT make them symmetric, and natRC (WORST
+downstream) is the MOST asymmetric -- the OPPOSITE of the hypothesis. **Strand-invariance is NOT the
+mechanism (withdrawn).** The robust result is purely empirical (the anti-correlation above), and it is
+NOT RC-specific -- plain over-training hurts downstream too. Likely real mechanism (open): over-fitting
+the corpus PPL objective washes out the per-position sensitivity variant-effect scoring relies on.
+CAVEATS: single benchmark (ssRNA(+) RBD); single seed per adapter (reseed running to confirm the
+peak-vs-champion gap survives seed noise). The plain-past-peak rho=-1.00 across 4 points is suggestive
+even at one seed. Data: `/data/viral/downstream/ds_scatter_*.json`, `strand_sym.py`.
