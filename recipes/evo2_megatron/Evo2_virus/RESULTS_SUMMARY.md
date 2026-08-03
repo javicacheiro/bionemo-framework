@@ -248,8 +248,10 @@ almost all the benefit;** attn/mixer projections add only ~0.4 pp. Put capacity 
    effect task (Spearman bind 0.368 vs up6 0.325 vs natural-RC 0.295), and natural-RC matches the plain
    champion's ssRNA(+) *held-out PPL* exactly (-21.53 vs -21.54%) yet scores far lower downstream -> the
    regression is **orthogonal to PPL**. (A proposed "RC teaches strand-invariance" mechanism was later
-   TESTED and REFUTED in Phase 15 -- RC adapters are not more strand-symmetric; the effect is not even
-   RC-specific: over-optimizing held-out PPL hurts downstream generally. See Phase 15.) **Net: keep the plain champion (-25.44%) as the production recipe; use dsRNA-RC only when
+   TESTED and REFUTED in Phase 15 -- RC adapters are not more strand-symmetric. And the
+   single-seed downstream differences do NOT survive reseeding -- Phase 15-RESEED shows ~0.1 Spearman
+   seed variance, so the apparent PPL->downstream anti-correlation was seed noise. The robust statement is
+   only that the plain champion is downstream-STABLE and competitive. See Phase 15 / Phase 15-RESEED.) **Net: keep the plain champion (-25.44%) as the production recipe; use dsRNA-RC only when
    in-distribution dsRNA likelihood is itself the goal, not as a general upgrade.** Held-out PPL is not a
    sufficient downstream proxy. (Single-seed downstream caveat; effect consistent across 8 metrics.)
 5. **α-cliff is sharp and just above 1024**, and **fundamental** (not under-regularization): α1024

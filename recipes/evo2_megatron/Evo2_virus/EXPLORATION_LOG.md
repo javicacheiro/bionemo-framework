@@ -535,8 +535,9 @@ corr(held-out-PPL magnitude, downstream Spearman): **ALL 11 rho=-0.50; PLAIN pas
 (n=4) rho=-1.00** (perfectly monotonic decline). **BEST downstream = dim256_a1024 do0.1x3k (0.415), a
 LIGHTLY-trained adapter -- the PPL champion (-25.44%) scores only 0.368.** Every PPL-lowering lever we
 used (more steps, higher dropout, RC augmentation) HURT downstream past the peak.
-**HEADLINE (strong form): in the well-trained regime, held-out PPL and zero-shot variant-effect are
-ANTI-CORRELATED.** For downstream transfer, do NOT minimize corpus PPL -- a light adapter transfers best.
+**HEADLINE (strong form) [!! REFUTED BY RESEED -- see Phase 15-RESEED below !!]: single-seed scatter
+suggested held-out PPL and downstream are ANTI-CORRELATED (lightly-trained best). This DID NOT REPLICATE
+across seeds -- it was seed noise. Read the Phase 15-RESEED correction before citing this.**
 
 MECHANISM TESTED + **REFUTED**: hypothesis was "RC teaches strand-invariance -> dilutes directional
 sensitivity." Strand-symmetry probe = correlation of an adapter's per-window logprob(seq) vs
@@ -554,3 +555,26 @@ the corpus PPL objective washes out the per-position sensitivity variant-effect 
 CAVEATS: single benchmark (ssRNA(+) RBD); single seed per adapter (reseed running to confirm the
 peak-vs-champion gap survives seed noise). The plain-past-peak rho=-1.00 across 4 points is suggestive
 even at one seed. Data: `/data/viral/downstream/ds_scatter_*.json`, `strand_sym.py`.
+
+## Phase 15-RESEED — the anti-correlation DOES NOT REPLICATE (2026-08-03) [CORRECTION]
+Reseeded the two do0.3 endpoints at seed 2345 (dropout controlled; both trained healthy, 0 nan, PPL
+reproduced -- champion s2345 held-out -25.50% ~= -25.44%). Downstream Spearman(bind_all):
+| config | seed 1234 | seed 2345 | mean | spread |
+|---|---:|---:|---:|---:|
+| champion do0.3x6k | 0.368 | 0.371 | 0.370 | 0.003 (STABLE) |
+| light do0.3x3k | 0.385 | 0.289 | 0.337 | 0.096 (HUGE) |
+The ordering FLIPS between seeds: at s1234 light(3k) 0.385 > champion(6k) 0.368; at s2345 champion 0.371 >
+light 0.289. **The lightly-trained adapter has ~0.10 seed variance; the champion is seed-stable (~0.003).**
+=> The Phase-15 single-seed scatter (rho -1.0 "past peak") was DRIVEN BY SEED NOISE in the under-trained
+points, NOT a real PPL->downstream anti-correlation. Averaged over seeds the champion (0.370) actually
+BEATS the 3k (0.337). CORRECTED CONCLUSIONS:
+1. **NO reliable PPL<->downstream anti-correlation** -- the single-seed differences (range 0.29-0.42) are
+   within the per-config seed noise (~+-0.05-0.10 Spearman). Single-seed downstream rankings of these
+   adapters are UNDERPOWERED (this also weakens the earlier Phase-14 "RC hurts downstream" claim -- same
+   single-seed caveat).
+2. **What IS robust:** (a) the champion (well-trained do0.3x6k) is downstream-STABLE and competitive; more
+   training -> MORE seed-reliable downstream, not worse. (b) low-dropout do0.1 is FRAGILE (diverged at
+   seed 2345: loss jumped 1.06->1.37 at iter 200, downstream 0.003). (c) the plain champion remains the
+   safe production recipe on BOTH held-out PPL and downstream stability.
+LESSON: downstream variant-effect eval on a single benchmark + single seed is noisy; need >=3 seeds to
+rank adapters. The exciting single-seed result did not survive replication -- reported honestly.
