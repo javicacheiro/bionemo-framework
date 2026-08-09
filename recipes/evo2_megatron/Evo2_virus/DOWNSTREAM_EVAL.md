@@ -130,3 +130,54 @@ benchmark, for an in-scope virus (SARS-CoV-2, ssRNA(+)). This is the study's str
 
 Caveat: single-model (no seeds/CIs); one virus; nucleotide-window mapping (8192 bp centered on the
 mutated codon). A generality follow-up (influenza HA DMS) is a natural next step.
+
+---
+
+## ⚠ IMPORTANT CAVEAT ADDED 2026-08-06 — this eval is NOT truly zero-shot (SARS-CoV-2 is IN-CORPUS)
+
+A direct check of the training corpus (Phase 16) found **`MN908947` — SARS-CoV-2 Wuhan-Hu-1 — present in
+`train.fasta`** (1 record; absent from `valid.fasta`). The LoRA therefore saw a SARS-CoV-2 genome during
+continue-pretraining, so every use of "zero-shot" above should be read as **within-corpus** variant-effect
+prediction: zero-shot with respect to the DMS *labels* and to this *specific variant set*, but NOT with
+respect to the organism.
+
+What this does and does not change:
+- **Does NOT invalidate the result.** The base model still scores ≈0 on the same windows while the LoRA
+  reaches 0.35–0.44, and the base saw SARS-CoV-2 in Evo2 pretraining too. The improvement is real.
+- **Does change its status as a GENERALITY claim.** This benchmark cannot support "generalizes to unseen
+  viruses." For that see `DOWNSTREAM_HA_EVAL.md`, and specifically the **Perth (H3N2)** strain: a k-mer
+  sweep (`kmer_probe.py`) found Perth HA has **zero** exact matches in the corpus down to 24-mers, whereas
+  **WSN (H1N1) does share exact 60-mers** with a homologous H1 strain that IS in the corpus. So the
+  contamination ranking is **RBD (exact genome) > WSN (homologous strain) > Perth (nothing detectable)**,
+  and any "generalizes to novel viruses" claim should cite **Perth**, not this file and not "HA" broadly.
+- **Consequence for the study**: after this finding there is effectively **ONE** clean out-of-corpus
+  benchmark (Perth H3N2), so a second one is the highest-value remaining validation work.
+- **Suggestive pattern**: champion Spearman tracks the contamination ranking exactly — RBD 0.370 >
+  WSN 0.269 > Perth 0.114 — consistent with part of the RBD/WSN signal being homology-assisted rather
+  than pure generalization.
+
+## ⚠ RBD IS HIGH-VARIANCE ACROSS SEEDS — single-seed RBD numbers are not trustworthy (2026-08-08)
+
+An earlier note here (2026-08-06) claimed RBD was "seed-stable for the champion" (0.368 / 0.371,
+spread 0.003) while the full-corpus variant scattered (spread 0.056). **A third champion seed refuted
+that.** Champion Spearman bind (all) across seeds:
+
+| config | seeds | values | mean | spread |
+|---|---:|---|---:|---:|
+| champion | n=3 | 0.368 / 0.371 / **0.293** | 0.3440 | **0.0780** |
+| full-corpus | n=2 | 0.372 / 0.316 | 0.3442 | 0.0557 |
+
+The champion is if anything the **noisier** arm, and the means are indistinguishable. So:
+
+- The headline **0.368** at the top of this file is **one draw from a distribution with ~0.08 spread**,
+  not a stable property of the recipe. Quote it as such.
+- This also supersedes **Phase 15-RESEED's** "champion is downstream-stable" conclusion, which was
+  itself based on only two seeds.
+- **RBD cannot distinguish training configurations** in this study: the between-config difference is
+  ~0.000 against within-config seed noise of 0.06-0.08. The out-of-corpus benchmarks
+  (`DOWNSTREAM_HA_EVAL.md`, `DOWNSTREAM_ENV_EVAL.md`) are what carry any comparative claim — there the
+  between-config gap exceeds the seed noise and the ranges are disjoint.
+- Base-vs-LoRA remains solid regardless: base ≈ 0 on every seed, LoRA 0.29-0.37. It is the
+  *comparisons between LoRA configs* that RBD cannot support.
+(Caveat on the corpus check itself: exact-substring matching would miss a sufficiently divergent strain, so
+read absence as "no evidence of presence," not proof.)

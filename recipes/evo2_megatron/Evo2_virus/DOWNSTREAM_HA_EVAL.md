@@ -109,6 +109,94 @@ windows, correlated with replicate-averaged DMS preference effect. AUROC target 
 |                | Spearman single-nt (n=3358) | 0.008 | **0.128** |
 |                | AUROC median / ≤−2         | 0.487 / 0.486 | **0.545 / 0.548** |
 
+## 4b. Full-corpus adapter (Phase 16, 2026-08-05) — transfers WORSE than the champion
+
+Same benchmark, same `pred_base`, same predict settings (mbs 1, bf16_mixed + vortex-FP8). Adapter =
+`PROD_20b_full_corpus/evo2/checkpoints/iter_0006000`: champion hyperparameters, but trained on the
+**whole corpus** (train + valid merged, 14,292 records, no held-out set).
+
+| strain | metric | base | champion | **full-corpus** |
+|---|---|---:|---:|---:|
+| **WSN (H1N1)** | Spearman all (n=10716)      | 0.097 | **0.285** | 0.204 |
+|                | Spearman single-nt (n=3292) | 0.091 | **0.291** | 0.229 |
+|                | AUROC median / ≤−2         | 0.543 / 0.549 | **0.646 / 0.660** | 0.601 / 0.623 |
+| **Perth (H3N2)** | Spearman all (n=10754)    | −0.015 | **0.095** | 0.041 |
+|                | Spearman single-nt (n=3358) | 0.008 | **0.128** | 0.063 |
+|                | AUROC median / ≤−2         | 0.487 / 0.486 | **0.545 / 0.548** | 0.519 / 0.517 |
+
+**Worse than the champion on all 8 metrics across both strains** (−0.081 Spearman WSN, −0.054 Perth),
+while remaining clearly above base. Over-training is ruled out arithmetically — at fixed steps the larger
+corpus means **fewer** epochs (8.35 vs 9.15). Working hypothesis is corpus specialization; see
+`EXPLORATION_LOG.md` "Phase 16". Results: `{wsn,perth}_results_prod_full_corpus.json`.
+
+## 4b-bis. CONFIRMED at 2 seeds per config (2026-08-06) — the deficit replicates
+
+> **SUPERSEDED IN PART (2026-08-08).** At n=3 per arm the WSN ranges OVERLAP; only Perth stays
+> disjoint. The deficit itself holds (champion mean > full mean, 33/36 pairwise across 4
+> out-of-corpus strains) and a dose-response is confirmed (champion > half > full on 4/4).
+> See `EXPLORATION_LOG.md` “Phase 16-CLUSTER”. Do not cite the disjointness below as current.
+
+
+The single-seed result above is now backed by a proper **2 v 2**. Note the comparison originally could not
+be made: HA had only ever been scored for ONE champion seed, so two full-corpus seeds would have been
+compared against a single point. The champion **s2345** adapter already existed (Phase 15-RESEED) and was
+scored on HA for ~50 min of predict with no training (`QUEUE_ha_champion_s2345.sh`).
+
+Spearman (all) per seed:
+
+| config | seed A | seed B | mean | spread |
+|---|---:|---:|---:|---:|
+| **WSN** champion    | 0.2855 (s1234) | 0.2519 (s2345) | **0.2687** | 0.0336 |
+| **WSN** full-corpus | 0.2042 (s1234) | 0.2331 (s3456) | **0.2187** | 0.0289 |
+| **Perth** champion    | 0.0951 (s1234) | 0.1332 (s2345) | **0.1142** | 0.0381 |
+| **Perth** full-corpus | 0.0408 (s1234) | 0.0654 (s3456) | **0.0531** | 0.0246 |
+
+**On all 8 HA metrics (Spearman all / single-nt, AUROC median / ≤−2, × 2 strains) the two configs' seed
+ranges are DISJOINT and the champion wins all 4 pairwise seed comparisons.** Within-config spread is
+~0.01–0.04; between-config gaps are 0.02–0.07. Both configs move between seeds — the champion went *down*
+on WSN (0.286→0.252) and *up* on Perth (0.095→0.133) — so this is not one noisy config: the **ordering is
+invariant**. The out-of-corpus transfer deficit of the full-corpus adapter is therefore **real**, not seed
+noise. (In contrast, in-corpus RBD is UNRESOLVED at n=2 and the full-corpus config is ~19× more
+seed-variable there; see `EXPLORATION_LOG.md` Phase 16 final conclusions.) Caveat: n=2, and this study's own
+standard is ≥3 — but the invariant ordering across 8 metrics makes a flip unlikely.
+Results: `{wsn,perth}_results_champion_s2345.json`, `{wsn,perth}_results_prod_full_corpus_s3456.json`.
+
+## 4c. Why HA, not RBD, carries the generality claim (leakage check, 2026-08-05)
+
+Checked both benchmark organisms against the training corpus directly:
+
+- **SARS-CoV-2 `MN908947` (Wuhan-Hu-1) IS present in `train.fasta`** (1 record; absent from valid).
+- No accession hit for `NC_002023`, `NC_007366`, `CY147323`, `AF389118`, and no exact **90-mer** match from
+  either HA reference.
+
+### CORRECTION (2026-08-06): a 90-mer test was too coarse — WSN is NOT cleanly out-of-corpus, Perth IS
+The initial check used one 90-mer per strain, which only detects a near-identical strain. A proper k-mer
+sweep (`kmer_probe.py`; non-overlapping probes across the whole CDS, forward + reverse-complement, against
+all 188,461,996 bp of `train_all.fasta`) gives:
+
+| probe | k=90 | k=60 | k=40 | k=30 | k=24 |
+|---|---:|---:|---:|---:|---:|
+| **WSN HA (H1N1)**   | 0/18 | **2/28** | **5/42** | **13/56** | **20/70** |
+| **Perth HA (H3N2)** | 0/18 | 0/28 | 0/42 | 0/56 | **0/70** |
+
+Chance probability of a 24-mer matching 1.9e8 bp is ~7e-5, so every hit above is **real sequence sharing**,
+not coincidence. Reverse-complement hits were 0 everywhere. Conclusion:
+
+- **WSN (H1N1) has homologous sequence in the corpus** — an influenza A virus with a related H1 HA is
+  present (a different strain, hence no 90-mer match). WSN is therefore only *partially* out-of-corpus.
+- **Perth (H3N2) is cleanly out-of-corpus** — zero exact matches down to 24-mers. **Perth is the single
+  cleanest out-of-corpus variant-effect benchmark in this study.**
+
+Two consequences, and note the second one *strengthens* Phase 16:
+1. Cite **Perth**, not "HA" generally, for any "generalizes to viruses it never saw" claim. Ranking the
+   three benchmarks by corpus contamination: RBD (exact genome present) > WSN (homologous strain present)
+   > Perth (nothing detectable).
+2. That ranking **matches the effect sizes**: champion Spearman RBD 0.370 > WSN 0.269 > Perth 0.114. Signal
+   strength tracks how much related sequence the model saw — consistent with part of the RBD/WSN signal
+   being homology-assisted. And the champion-vs-full-corpus gap is *relatively largest* on the cleanest
+   benchmark (Perth 0.114 vs 0.053, a 2.15x ratio, vs WSN 0.269 vs 0.219, 1.23x), i.e. the corpus-
+   specialization deficit is most pronounced exactly where contamination is least able to explain it.
+
 ## 5. Conclusion — the downstream edge GENERALIZES to influenza, but weaker than SARS-CoV-2
 On **both** influenza HA strains the LoRA improves over base and every LoRA correlation is highly
 significant, so the SARS-CoV-2 finding is **not virus-specific** — the −25% PPL LoRA adds genuine

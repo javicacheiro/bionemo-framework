@@ -578,3 +578,438 @@ BEATS the 3k (0.337). CORRECTED CONCLUSIONS:
    safe production recipe on BOTH held-out PPL and downstream stability.
 LESSON: downstream variant-effect eval on a single benchmark + single seed is noisy; need >=3 seeds to
 rank adapters. The exciting single-seed result did not survive replication -- reported honestly.
+
+## Phase 16 — FULL-CORPUS production run: equal in-corpus, WORSE out-of-corpus (2026-08-04/05) [h200-2]
+Trained the champion recipe on the **whole corpus** (train.fasta 12,944 + valid.fasta 1,348 = **14,292
+records**), i.e. no held-out set — the standard "final production model" move once hyperparameters are
+locked. **Hyperparameters byte-identical to `RECIPE.sh` §1** (20B vortex-FP8, dim256 × α1024 × do0.3,
+seq16384, mbs1/gbs16, recompute-1, 6000 steps, lr 3e-4→3e-5, warmup 10, decay 6000); ONLY the train
+split changed. Merge verified lossless: preprocessed `.bin` = 188,461,996 B = exactly
+171,803,928 (train) + 16,658,068 (valid). Ran clean: **0 nan / 0 skipped over all 6000 steps**,
+9.17 s/step, ~397 TFLOP/s/GPU, 15.6 h, LR landed exactly on the 3e-5 floor. Step-20 sanity vs the
+champion's own step 20 was near-identical (lm loss 1.17769 vs 1.17844; params norm 2240.927 both).
+
+**In-train PPL is NOT comparable and must not be quoted as a result.** valid is now inside train, so the
+eval is a training-fit monitor: 2.654 (500) → 2.512 → 2.430 → 2.412 → 2.292 → 2.199 → 2.131 → 2.118 →
+2.072 → 2.044 → 1.906 → **1.908 (6000)**; final validation-set 1.983 / test-set 1.976. For scale the
+champion's *held-out* curve ended at 2.411 — the full-corpus run passes that value by step ~2000. Same
+reason the −25.44% capped headline **cannot** be restated for this adapter: `valid_cap8192` is trained-on.
+
+### Downstream (the only valid read) — base vs champion vs full-corpus
+Scored with the SAME `pred_base` and the SAME settings as every other adapter (mbs 1, bf16_mixed +
+vortex-style-fp8) so the numbers are directly comparable.
+
+| benchmark | metric | base | champion | **full-corpus** |
+|---|---|---:|---:|---:|
+| SARS-CoV-2 RBD (**in-corpus**) | Spearman bind all | −0.012 | 0.368 / 0.371 | **0.372** |
+|                                | Spearman bind single-nt | 0.017 | — | 0.460 |
+|                                | Spearman expr all | 0.004 | — | 0.401 |
+| HA WSN H1N1 (**out-of-corpus**) | Spearman all | 0.097 | **0.286** | 0.204 |
+|                                 | Spearman single-nt | 0.091 | **0.291** | 0.229 |
+|                                 | AUROC median / ≤−2 | 0.543/0.549 | **0.646/0.660** | 0.601/0.623 |
+| HA Perth H3N2 (**out-of-corpus**) | Spearman all | −0.015 | **0.095** | 0.041 |
+|                                   | Spearman single-nt | 0.008 | **0.128** | 0.063 |
+|                                   | AUROC median / ≤−2 | 0.487/0.486 | **0.545/0.548** | 0.519/0.517 |
+
+**RBD: does not distinguish the configurations at all** — and the story here changed twice as seeds
+accumulated, which is itself the lesson. At n=1 it looked identical; at n=2 the full-corpus arm looked
+uniquely noisy (spread 0.056 vs the champion's 0.003); at **n=3 the champion is the noisier of the two**
+(0.368/0.371/**0.293**, spread **0.078**) and the means are indistinguishable (0.3440 vs 0.3442).
+See "Phase 16 — RBD VARIANCE CORRECTION" below. Treat RBD as uninformative for this comparison.
+**HA: worse on all 8 metrics, both strains** — −0.081 Spearman on WSN (−28% rel) and −0.054 on Perth
+(−57% rel). Still far above base everywhere, so the adapter learned real signal; it just transfers less.
+
+### In-corpus vs out-of-corpus is the axis (leakage audit extension)
+Checked the benchmark organisms against the training corpus directly: **`MN908947` (SARS-CoV-2
+Wuhan-Hu-1) IS in `train.fasta`** (1 record, absent from valid), while **influenza HA is absent from both
+splits** — no accession hit (`NC_002023`, `NC_007366`, `CY147323`, `AF389118`) and no exact 90-mer match
+from either the WSN or Perth HA reference CDS. Consequences:
+1. **RBD was never truly zero-shot** — the champion's published 0.368/0.371 carries this caveat too. It is
+   a *within-corpus* variant-effect readout.
+2. **HA is the genuinely out-of-corpus generality test** — but see the k-mer correction below: only the
+   **Perth (H3N2)** strain is clean; WSN (H1N1) shares exact 60-mers with a homologous H1 strain that IS in
+   the corpus. Cite **Perth** for "generalizes to unseen viruses", not "HA" broadly.
+3. Neither organism is in the 1,348 newly-added records → the champion-vs-full-corpus comparison is **not**
+   confounded by differential benchmark leakage. (Caveat: exact-substring matching would miss a divergent
+   HA strain; read as "no evidence of presence," not proof of absence.)
+
+### Over-training is NOT the explanation (arithmetic rules it out)
+Tempting first guess, but wrong: at a fixed 6000 steps × gbs 16 the run consumes 96,000 × 16,384 =
+**1.573 B tokens** regardless of corpus size, so
+- champion:     1.573 B / 171.80 M = **9.15 epochs**
+- full-corpus:  1.573 B / 188.46 M = **8.35 epochs**
+
+More data at fixed steps = **fewer** passes per record. The full-corpus model is *less* over-trained yet
+transfers *worse*, so "it over-fit" cannot be the mechanism, and a checkpoint sweep over this run's
+retained `iter_*` would be testing a hypothesis the arithmetic already disfavours.
+
+### Working hypothesis: corpus specialization (TENTATIVE, single seed)
+The pattern that fits is **specialization to this corpus**: unchanged on the benchmark whose organism is
+*inside* the corpus, degraded on both whose organisms are *outside* it. Adding 10.4% more of the same
+corpus appears to buy in-distribution fit at the cost of transfer to distant viruses.
+**NOT ESTABLISHED — single seed.** Per Phase 15-RESEED the champion is seed-stable on RBD (sd 0.003) and
+our full-corpus RBD reproduces that, but **HA has never been reseeded**, so its per-config seed variance is
+unknown and the −0.05/−0.08 gaps are not demonstrably outside a plausible noise band. A full-corpus
+**reseed (seed 2345) scored on HA** is the discriminating experiment and is what settles this.
+Seed bookkeeping (verified in both config dumps): the champion's original and the full-corpus run BOTH
+used `seed: 1234`, so the comparison above is **initialization-matched** — but not draw-matched, since a
+different corpus necessarily yields a different data order. `seed: 42` appears as a separate unchanged
+sub-config in every run.
+
+### Phase 16-RESEED attempt 1 (seed 2345) — DIVERGED. Full-corpus is the LESS STABLE variant.
+`reseed_full_corpus_s2345.sh` (identical to `RUN_full_corpus.sh` except `--seed 2345`) **collapsed at
+~iter 100–300** and was killed at iter 300 rather than burn 15.6 h. Trajectory
+(`train_prod_full_corpus_s2345.DIVERGED.log`):
+
+| iter | lm loss | grad norm |
+|---:|---:|---:|
+| 50  | 1.156 | 0.097 |
+| 100 | 1.111 | **0.758** |
+| 150 | **1.378** | 0.801 |
+| 200 | 1.369 | 0.019 |
+| 250 | **3.211** | **0.000** |
+| 300 | **6.220** | **0.000** |
+
+Grad norm spiked ~8×, loss inverted, then grad norm pinned at exactly 0.000 while loss ran away; val PPL
+at iter 250 = **502** vs base ~3.5, and by iter 300 train loss (6.2199) had converged to val loss (6.2187)
+— the adapter collapsed to a constant output. **0 nan / 0 skipped throughout**, so this is a genuine
+dead-adapter collapse, NOT a masked numerical fault. Healthy runs at the same point hold grad norm ~0.1
+with loss declining (cf. `train_light_do3_3k_seed2345.log`: 1.163→1.015, gn 0.095→0.151).
+
+**The configuration matrix is the finding:**
+| data | seed 1234 | seed 2345 |
+|---|---|---|
+| train-only (champion) | healthy, −25.44% | healthy, −25.50% |
+| **full corpus** | **healthy** | **DIVERGED** |
+
+Train-only survives both seeds; full-corpus survives 1234 but not 2345. So **full-corpus is measurably
+less stable**, which is a *second, independent* mark against it alongside the weaker HA transfer. This fits
+the α×LR / effective-update-magnitude fragility theme (see "α×LR — UNIFIED CONCLUSION"): the recipe sits
+near a stability edge and enlarging the corpus nudges it closer. Caveat: n=1 divergence — one unlucky draw
+is not ruled out.
+
+Consequence for the seed question: a diverged run settles NOTHING about the HA gap, so it does not count as
+the second seed. Diverged run kept as evidence: `PROD_20b_full_corpus_s2345/` (9.6 GB) + `*.DIVERGED.log`.
+
+### Phase 16-RESEED attempt 2 (seed 3456) — HEALTHY, and the HA gap REPLICATES (8/8 metrics disjoint)
+`reseed_full_corpus_s3456.sh` ran clean: 0 nan / 0 skipped, 9.18 s/step, LR to the floor, final fit PPL
+1.947 (val-set 1.912 / test-set 1.927) vs s1234's 1.908 (1.983/1.976) — **seed spread on the FIT metric is
+only ~0.04–0.06 PPL**, and the two curves tracked within ~0.005 at 1500/2500/3000/4500. Grad norm held
+~0.10–0.20 throughout; it sailed through iters 100–300 where s2345 died (gn 0.098/0.141/0.126/0.149/0.141),
+confirming the s2345 divergence was **seed-specific, not inherent to the full-corpus config**.
+
+**A NECESSARY FIX TO THE COMPARISON:** HA had only ever been scored for ONE champion seed (s1234), so two
+full-corpus seeds vs one champion point would have compared a spread to a point. The champion s2345 adapter
+already existed from Phase 15-RESEED, so it was scored on HA for ~50 min of predict, no training
+(`QUEUE_ha_champion_s2345.sh` → `{wsn,perth}_results_champion_s2345.json`). That gives a true **2 v 2**.
+(Its original RBD predictions did NOT survive the h200 decommission — only the published 0.371 did — a
+small argument for retaining adapters, not just their scores.)
+
+HA, 2 seeds per config (champion s1234/s2345 vs full-corpus s1234/s3456):
+
+| metric | champion mean (spread) | full-corpus mean (spread) | gap | ranges | champ wins |
+|---|---:|---:|---:|:--:|:--:|
+| WSN spearman all      | 0.2687 (0.0336) | 0.2187 (0.0289) | +0.0500 | DISJOINT | 4/4 |
+| WSN spearman single-nt| 0.2691 (0.0433) | 0.2362 (0.0136) | +0.0329 | DISJOINT | 4/4 |
+| WSN auroc median      | 0.6362 (0.0186) | 0.6077 (0.0138) | +0.0285 | DISJOINT | 4/4 |
+| WSN auroc ≤−2         | 0.6479 (0.0239) | 0.6269 (0.0086) | +0.0210 | DISJOINT | 4/4 |
+| Perth spearman all    | 0.1142 (0.0381) | 0.0531 (0.0246) | +0.0611 | DISJOINT | 4/4 |
+| Perth spearman single-nt| 0.1444 (0.0337) | 0.0778 (0.0306) | +0.0666 | DISJOINT | 4/4 |
+| Perth auroc median    | 0.5555 (0.0215) | 0.5252 (0.0129) | +0.0304 | DISJOINT | 4/4 |
+| Perth auroc ≤−2       | 0.5595 (0.0237) | 0.5240 (0.0134) | +0.0355 | DISJOINT | 4/4 |
+
+**On all 8 HA metrics the two configs' seed ranges do not overlap and the champion wins every one of the 4
+pairwise seed comparisons.** Within-config HA seed spread is ~0.01–0.04; the between-config gaps are
+0.02–0.07, i.e. larger. Both configs move around between seeds (champion WSN 0.286→0.252, Perth
+0.095→0.133 — note it went DOWN on WSN and UP on Perth), so this is not one config being noisy: the
+**ordering is invariant**. => **The out-of-corpus transfer deficit REPLICATES.** As strong as n=2 permits.
+
+RBD (in-corpus), 2 seeds per config — ranges OVERLAP, champion wins only 2/4 pairwise, so **RBD is
+UNRESOLVED at n=2**. At the time the full-corpus arm looked uniquely noisy (spread 0.0557 vs the
+champion's 0.0030, "~19×"). **THAT READING DID NOT SURVIVE A THIRD CHAMPION SEED — see the RBD
+VARIANCE CORRECTION section below. Do not cite the 19× figure.**
+
+### Phase 16 — RBD VARIANCE CORRECTION (2026-08-08): the champion is NOT RBD-stable either
+Champion seed 3456 (trained clean: 0 nan, held-out PPL 2.450, entirely normal) scored RBD Spearman
+bind_all = **0.2930**, far below s1234 (0.368) and s2345 (0.371):
+
+| config | seeds | values | mean | spread |
+|---|---:|---|---:|---:|
+| champion | n=3 | 0.3680 / 0.3710 / **0.2930** | 0.3440 | **0.0780** |
+| full-corpus | n=2 | 0.3720 / 0.3163 | 0.3442 | 0.0557 |
+
+**The champion is now the NOISIER arm on RBD, and the two means are indistinguishable (0.3440 vs
+0.3442).** Consequences:
+1. **"Full-corpus is ~19× more seed-variable on RBD" is REFUTED.** It was an artifact of n=2 — the
+   champion happened to draw two adjacent seeds first.
+2. It also weakens **Phase 15-RESEED's** "the champion is downstream-STABLE (0.368→0.371, spread
+   0.003)" — that too was n=2, and a third seed spreads it to 0.078. Champion downstream stability
+   should no longer be claimed on RBD.
+3. **RBD cannot separate these configurations.** Its between-config difference (~0.000) is far below
+   its within-config seed noise (~0.06-0.08). Report RBD as uninformative here, not as weak support.
+4. The instability case against full-corpus now rests on TWO signals, not three: the divergence
+   (1 of 3 full-corpus seeds vs 0 of 3 champion seeds) and the lower HA means. The RBD-variance
+   signal is withdrawn.
+**The HA finding is UNAFFECTED and still holds at champion n=3 vs full n=2:** champion WSN
+[0.2519, 0.2855] vs full [0.2042, 0.2331] and champion Perth [0.0951, 0.1332] vs full [0.0408, 0.0654]
+— still fully DISJOINT, champion winning all 6 pairwise comparisons per strain. Note the contrast:
+on HA the between-config gap exceeds the within-config noise; on RBD it does not. That is precisely
+why the out-of-corpus benchmarks carry the argument.
+METHODOLOGICAL LESSON: this claim flipped at n=1, again at n=2, and settled only at n=3 — exactly the
+failure mode Phase 15-RESEED warned about. Do not report a variance comparison from two seeds.
+
+### Phase 16-ABLATION — intermediate corpus (train + HALF of valid): DOSE-RESPONSE IS AMBIGUOUS
+To separate "corpus specialization" (smooth: more corpus -> worse transfer) from "adding the valid split
+perturbed a near-edge optimisation into a worse basin" (threshold: nothing until the full set), trained a
+corpus exactly halfway between: `train.fasta + valid_halfA` = **13,618 records**. Seed **1234**, matching
+champion-s1234 and full-s1234, so the three points differ ONLY in corpus size. Stride-2 split of
+`valid.fasta` (it is GROUPED by source — all `ictv:*` then `ncbi_assembly:*` — so a first-half split would
+be source-biased); the halves came out balanced 671 ictv / 3 ncbi each, zero overlap. Preprocess verified
+lossless: 171,803,928 + 8,046,449 = 179,850,377, and halfA + halfB = 16,658,068 = the original valid `.bin`.
+Unlike the full-corpus run this **keeps a real held-out set** (`valid_halfB`, 674 recs, never trained on):
+held-out PPL 2.752 (500) -> 2.606 -> 2.529 -> 2.539 -> 2.484 -> 2.477 -> 2.421 -> 2.373 -> 2.413 -> 2.398
+-> 2.383 -> **2.446 (6000)**; final val-set 2.431 / test-set 2.358. (NOT comparable to the champion's
+-25.44%: different, smaller held-out set. Kept as an internal sanity signal only.) Clean run, 0 nan/0 skipped.
+
+Seed-matched (all seed 1234) downstream:
+
+| corpus | records | Mtok | epochs @6k steps | WSN | Perth | RBD |
+|---|---:|---:|---:|---:|---:|---:|
+| champion (train only) | 12,944 | 171.80 | 9.15 | 0.2855 | 0.0951 | 0.3680 |
+| **half (train+674)**  | 13,618 | 179.85 | 8.75 | **0.2109** | **0.1035** | **0.3286** |
+| full (train+1348)     | 14,292 | 188.46 | 8.35 | 0.2042 | 0.0408 | 0.3720 |
+
+Placing the (n=1) half point against the 2-seed ranges of the other two configs:
+
+| metric | half | champion range | full range | half behaves like |
+|---|---:|---|---|---|
+| WSN   | 0.2109 | [0.252, 0.285] | [0.204, 0.233] | **FULL** |
+| Perth | 0.1035 | [0.095, 0.133] | [0.041, 0.065] | **CHAMPION** |
+| RBD   | 0.3286 | [0.368, 0.371] | [0.316, 0.372] | FULL (weak: full's range is wide) |
+
+**THE TWO HA STRAINS DISAGREE, so the mechanism is NOT resolved.** WSN says the deficit is already fully
+present at +674 records (dose-like, saturating early); Perth says the deficit only appears at the full
++1,348 (threshold-like). RBD is the least informative (contaminated, and full's seed spread 0.056 spans
+the half point). Tension worth noting: **Perth is the CLEANEST benchmark** and it favours the threshold
+reading, but half is n=1 and HA seed spreads are ~0.03, which is the size of the effect being judged.
+=> **Do not claim a dose-response.** Resolving it needs a second half-corpus seed (~15.6 h); the HIV-1 Env
+benchmark (Phase 16-ENV) will also weigh in as a third, near-clean family.
+
+WHAT IS ROBUST from this ablation: **half-corpus is <= champion on all three benchmarks and beats it on
+none.** So there is no "add a little data for free" regime — the champion (train-only) remains the recipe,
+and the practical guidance in RECIPE.sh is unchanged regardless of which mechanism turns out to be right.
+
+### Phase 16 — k-mer CORRECTION to the leakage check (2026-08-06): rank the benchmarks by contamination
+The original check used ONE 90-mer per HA strain, which only detects a near-identical strain. A proper sweep
+(`kmer_probe.py`: non-overlapping probes across each full CDS, fwd + revcomp, vs all 188.46 Mbp of
+`train_all.fasta`) shows **WSN is NOT clean**:
+
+| probe | k=90 | k=60 | k=40 | k=30 | k=24 |
+|---|---:|---:|---:|---:|---:|
+| WSN HA (H1N1)   | 0/18 | **2/28** | **5/42** | **13/56** | **20/70** |
+| Perth HA (H3N2) | 0/18 | 0/28 | 0/42 | 0/56 | **0/70** |
+
+A 24-mer matching 1.9e8 bp by chance is ~7e-5, so every hit is real homology (revcomp hits: 0 everywhere).
+=> An influenza A with a **related H1 HA is in the corpus**; WSN is only partially out-of-corpus. **Perth
+(H3N2) is the single cleanest out-of-corpus benchmark in the study** (nothing detectable at k>=24).
+Contamination ranking: **RBD (exact genome present) > WSN (homologous strain) > Perth (nothing)**.
+TWO IMPLICATIONS, the second of which STRENGTHENS the Phase 16 result:
+1. Champion Spearman tracks that ranking exactly — RBD 0.370 > WSN 0.269 > Perth 0.114 — so part of the
+   RBD/WSN signal is plausibly homology-assisted rather than pure generalization.
+2. The champion-vs-full-corpus deficit is **relatively LARGEST on the cleanest benchmark**: Perth
+   0.114 vs 0.053 = **2.15x**, WSN 0.269 vs 0.219 = 1.23x. The specialization effect is most pronounced
+   exactly where contamination cannot explain it.
+LESSON (methodological): use a k-mer sweep, not a single long probe, to test corpus containment; and rank
+benchmarks by contamination rather than treating "absent" as binary.
+
+### Phase 16-ENV — third virus family (HIV-1 Env): the deficit REPLICATES (2026-08-08)
+Built a third downstream benchmark because the k-mer sweep left only ONE clean out-of-corpus test
+(Perth H3N2) — a single point of failure for every generality claim. HIV-1 Env (Haddox 2018,
+BF520 + BG505, 25,310 windows) is *Retroviridae*, near-clean (0 hits at k>=40). ZIKV E was evaluated
+and REJECTED: 12/16 exact 90-mers in the corpus, effectively memorised. Full construction, and the
+HXB2-numbering problem solved by deriving offset=29 (argmax rate 54.7%/46.6% vs 5% chance, 12 shifted
+controls all at chance), in `DOWNSTREAM_ENV_EVAL.md`.
+
+| strain | base | champion mean (range, n=3) | full mean (range, n=2) | gap | ranges | champ wins |
+|---|---:|---|---|---:|:--:|:--:|
+| BF520 | 0.0280 | **0.2263** [0.2047, 0.2482] | 0.1911 [0.1906, 0.1916] | +0.0352 | DISJOINT | 6/6 |
+| BG505 | 0.0433 | **0.2207** [0.2039, 0.2468] | 0.1734 [0.1600, 0.1868] | +0.0473 | DISJOINT | 6/6 |
+
+1. **The LoRA transfers to HIV.** Base ~0.03/0.04 -> LoRA 0.16-0.25 on a family essentially absent
+   from the corpus. Strongest evidence yet that the PPL gain buys real capability, not corpus recall.
+2. **The champion-vs-full deficit REPLICATES on an independent family** — disjoint ranges, 6/6 both
+   strains. Corpus specialization now rests on **2 out-of-corpus families / 4 strains**, not 1 strain.
+3. **half stays ambiguous in the same split way**: champion-like on BF520, full-like on BG505 —
+   mirroring HA (champion-like on Perth, full-like on WSN). Across all 4 clean strains half is 2-2.
+   Dose vs threshold still unresolved; more half seeds are training.
+4. **Weakens an earlier observation**: champion Spearman does NOT simply track contamination. Env is
+   near-clean yet scores 0.226/0.221, well above clean Perth (0.109). Benchmark difficulty/biology
+   dominates. Treat "signal tracks contamination" as weak and confounded; what survives is that RBD
+   is not zero-shot and comparative claims must rest on out-of-corpus families.
+
+### Phase 16-CLUSTER (2026-08-08) — n=3 per arm: DOSE-RESPONSE CONFIRMED, "disjoint" claim WEAKENED
+Used a second 4-node H200 cluster (shared `/fsx`) to bring every arm to n=3: `half_s2345`,
+`half_s3456`, `full_s4567` trained concurrently, all clean (0 nan, TRAIN_EXIT=0), each scored on all
+five readouts. Full results per seed in the `*_results_*.json` files.
+
+| benchmark | champion mean | half mean | full mean | gap c−f | champion-vs-full ranges | pairwise |
+|---|---:|---:|---:|---:|:--:|:--:|
+| HA WSN    | 0.2656 | 0.2332 | 0.2313 | +0.0343 | **OVERLAP** | 8/9 |
+| HA Perth  | 0.1088 | 0.0981 | 0.0583 | +0.0505 | **DISJOINT** | 9/9 |
+| Env BF520 | 0.2263 | 0.2129 | 0.2006 | +0.0257 | **OVERLAP** | 8/9 |
+| Env BG505 | 0.2207 | 0.2000 | 0.1859 | +0.0348 | **OVERLAP** | 8/9 |
+| RBD       | 0.3440 | 0.3344 | 0.3344 | +0.0096 | OVERLAP | 4/9 |
+
+**CORRECTION — the "DISJOINT on 8/8 metrics" result does NOT survive n=3.** `full_s4567` drew high
+across the board (WSN 0.2565, Env 0.2196/0.2108) and dissolves the separation on three of the four
+out-of-corpus strains. Only **Perth** — the cleanest benchmark — remains fully disjoint. Any statement
+of the form "the ranges never overlap" must now be qualified; that was an n=2/n=3 artifact and is the
+THIRD claim in this phase overturned by adding seeds.
+
+**WHAT SURVIVES, and is now better supported than the disjointness ever was:**
+- champion mean > full mean on **all five** benchmarks;
+- **33 of 36** pairwise seed comparisons favour the champion across the four out-of-corpus strains;
+- Perth (cleanest) still fully disjoint, 9/9.
+(Caveat: the 36 pairwise comparisons are not independent — they come from 3+3 seeds — so treat 33/36
+as a consistent direction, not a p-value.)
+
+**DOSE-RESPONSE IS CONFIRMED — this resolves the Phase 16-ABLATION ambiguity.** Ordering the three
+corpora by size (12,944 → 13,618 → 14,292 records):
+
+    champion  >  half  >  full     on 4 of 4 out-of-corpus strains, by mean
+
+The half-corpus point sits *between* the other two everywhere, so transfer degrades **gradually with
+added corpus**, not at a threshold. The earlier 2–2 split was `half_s1234` being a low draw: at n=3 the
+half arm has the largest seed spread of any arm on HA (0.081 WSN, 0.078 Perth), which is exactly why
+n=1 could not resolve this. Under a random ordering (given champion > full) the chance of half landing
+in between on all four strains is (1/3)^4 ≈ 1.2%, so the monotonicity is unlikely to be coincidence —
+though 4 strains from 2 families are not fully independent either.
+
+**Mechanism implication:** a graded dose-response supports *corpus specialization* (more of this
+corpus progressively trades away out-of-corpus transfer) over the "adding valid perturbed the run into
+a worse basin" alternative, which predicted a threshold. Not proof, but the ablation now points one way.
+
+### Phase 16-FINAL (2026-08-09) — n≈5 per arm on 3 virus families. Both surviving claims HOLD.
+Second cluster round brought every arm to n=5 (full n=4 at time of writing; `full_s5678` still
+training on h200). Every model scored on all five readouts. Mean ± sd across seeds:
+
+| benchmark | champion (n=5) | half (n=5) | full (n=4) | gap c−f | ranges | pairwise | dose |
+|---|---|---|---|---:|:--:|:--:|:--:|
+| HA WSN    | 0.2801 ± 0.024 | 0.2396 ± 0.042 | 0.2346 ± 0.022 | +0.0455 | OVERLAP | 19/20 | ✔ |
+| HA Perth  | 0.1113 ± 0.021 | 0.0933 ± 0.031 | 0.0655 ± 0.019 | +0.0458 | **DISJOINT** | **20/20** | ✔ |
+| Env BF520 | 0.2311 ± 0.019 | 0.2167 ± 0.024 | 0.2051 ± 0.016 | +0.0260 | OVERLAP | 18/20 | ✔ |
+| Env BG505 | 0.2285 ± 0.025 | 0.2039 ± 0.020 | 0.1929 ± 0.025 | +0.0356 | OVERLAP | 17/20 | ✔ |
+| RBD       | 0.3454 ± 0.033 | 0.3275 ± 0.018 | 0.3250 ± 0.033 | +0.0204 | OVERLAP | 12/20 | ✔ |
+
+**BOTH surviving claims hold at n=5, on 2 out-of-corpus families / 4 strains:**
+1. **champion > full on every benchmark**, **74 of 80** pairwise seed comparisons out-of-corpus, and
+   Perth (the cleanest benchmark) still fully DISJOINT at 20/20.
+2. **Dose-response monotonic on 4/4 out-of-corpus strains** (champion > half > full), now with the
+   half arm at n=5 rather than the n=1 that made this ambiguous for two days.
+
+Effect sizes are modest and comparable to within-arm sd (gaps 0.026–0.046 vs sd 0.016–0.042), which is
+why RANGES OVERLAP on 3 of 4 strains and why single-seed comparisons were so misleading here. State
+this as **a consistent shift in means with a reproducible ordering**, never as separation of runs.
+Seed sd is itself informative: the **half arm is the most variable** (up to 0.042 on WSN) — a middle
+corpus size gives the least reproducible adapter, which is a practical argument against half-measures.
+RBD reaches monotonicity too but at 12/20 pairwise with a 0.020 gap against 0.033 sd — still
+uninformative on its own, exactly as recorded in the RBD VARIANCE CORRECTION.
+CLAIM-STABILITY NOTE: three claims in this phase were overturned by adding seeds (RBD variance,
+contamination-tracking, range disjointness). The two above are the ones that survived every increase
+from n=1 to n=5 — a useful marker of which kind of statement is trustworthy in this study: statements
+about MEANS and ORDERINGS across many strains, not about individual runs or ranges.
+
+### Phase 16-BENCH4 (2026-08-09) — a 4th out-of-corpus benchmark is NOT AVAILABLE. Why, and the rule.
+Attempted to add a fourth downstream benchmark. **Result: negative — do not retry without new data.**
+
+Surveyed all **157 jbloomlab repos**. Every DMS dataset in the `site,A..Y` preference format belongs to
+a virus family already used (influenza / HIV / SARS-CoV-2 / Zika) or is an antibody (2B06,
+Ab-CGGnaive); the rest are software. Repos for genuinely new families — `MeV_SSPE_Dynamics` (measles),
+`Herpesvirus-Glycoprotein-Analysis` (EBV) — contain reference genomes and alignments but **no DMS
+preference data**, so they are not variant-effect benchmarks at all.
+
+The two remaining same-family options were tested and **both are fully contaminated**:
+
+| candidate | DMS strain | k=90 | k=60 | k=40 | k=30 | k=24 | verdict |
+|---|---|---:|---:|---:|---:|---:|---|
+| PB2 (polymerase) | A/PR/8/1934 | **25/25** | 38/38 | 57/57 | 76/76 | 95/95 | 100% IN CORPUS |
+| M1 (matrix) | A/PR/8/1934 | 5/8 | 9/12 | 15/18 | 22/25 | 28/31 | IN CORPUS |
+
+**ROOT CAUSE, and the generalisable rule.** The corpus is the ICTV VMR (one exemplar per species), and
+the exemplar for *Influenza A virus* is **A/Puerto Rico/8/1934** — present as its segment records
+`V00603.1`, `J02151.1`, `V01099.1`, all `ictv:VMR1001046`. So every PR8-derived DMS is memorised. This
+single fact explains the whole influenza pattern:
+
+    PB2/M1  (PR8, 1934)        -> 100% contained
+    HA WSN  (WSN, 1933)        -> partial (exact 60-mers shared with the PR8 exemplar)
+    HA Perth (Perth, 2009)     -> clean (≈75 years of antigenic drift from the exemplar)
+
+=> **Corpus containment is governed by how far the DMS strain has DRIFTED from the corpus exemplar,
+NOT by taxonomy.** A "new virus family" is neither necessary nor sufficient for a clean benchmark.
+The clean ones we have (Perth H3N2, HIV Env BF520/BG505) are both **fast-evolving RNA viruses with
+modern DMS strains**; the contaminated ones (PR8 1934, ZIKV MR766 1947, SARS-CoV-2 Wuhan-Hu-1) are
+canonical lab/reference strains that ARE the exemplars.
+
+**SELECTION RULE for any future benchmark: pick a fast-evolving virus whose DMS strain is decades
+diverged from the ICTV exemplar, then verify with `kmer_probe.py` BEFORE building anything.** Screening
+costs minutes; building first wastes hours (as it nearly did here).
+The study therefore stands on **3 virus families / 4 clean-or-near-clean strains** (HA Perth, HA WSN
+partial, Env BF520, Env BG505), which is what Phase 16-FINAL rests on. Extending it needs a DMS from
+outside the Bloom-lab preference corpus (e.g. a ProteinGym-style fitness dataset on a hypervariable
+virus such as HCV NS5A), which is a different data format and a separate piece of work.
+
+### Phase 16 — FINAL CONCLUSIONS
+1. **Training on the full corpus does NOT produce a better model; it produces a worse-transferring one.**
+   At n=3 per arm across 2 out-of-corpus virus families / 4 strains: champion mean > full mean on every
+   benchmark, 33/36 pairwise seed comparisons favour the champion, and transfer degrades **monotonically
+   with corpus size** (champion > half > full on 4/4 strains). Ranges overlap on 3 of 4 strains at n=3
+   (only Perth stays disjoint), so state this as a consistent mean/ordering effect, NOT as separation.
+   In-corpus RBD cannot distinguish the configurations at all.
+2. **Two independent signals against the full-corpus config**: (a) 1 of 3 seeds diverged outright vs 0 of 3
+   for the champion; (b) HA means lower on every metric, ranges disjoint. *(A third signal — "RBD seed
+   spread 0.056 vs 0.003" — was claimed at n=2 and is WITHDRAWN: at n=3 the champion's RBD spread is
+   0.078, larger than full's. See the RBD VARIANCE CORRECTION section.)*
+3. **The champion (train-only, dim256 × α1024 × do0.3 × 6k) remains the production recipe** — on held-out
+   PPL, on downstream transfer, and on run-to-run reliability. The full-corpus adapter is a **sidegrade**:
+   defensible only if the deployment distribution closely matches the training corpus, and it forfeits any
+   held-out metric by construction.
+4. **Mechanism still open.** Over-training is ruled out arithmetically (fewer epochs, above). "Corpus
+   specialization" fits but is not proven; distinguishing it from "adding the valid split perturbed a
+   near-edge optimisation into a worse basin" would need more seeds and probably an intermediate-corpus
+   ablation (e.g. train + half of valid).
+5. **k-fold is not worth running** (see the earlier k-fold assessment): more data from this corpus made
+   transfer worse, so fold-splitting the same corpus will not produce a better model, and at k=5 it costs
+   ~78 h. Spend node time on additional *benchmarks* or *seeds* instead.
+6. **Remaining caveat: n=2.** Phase 15-RESEED set ≥3 seeds as this study's standard. HA's ordering is
+   invariant across all 8 metrics so a third seed is unlikely to flip it, but RBD genuinely needs one
+   (champion s3456 does not exist: ~15.6 h) before any claim is made about in-corpus performance.
+
+### Practical verdict
+The full-corpus model is **not a strictly-better production artifact — it is a sidegrade.** Prefer it only
+when the deployment target resembles the training corpus; prefer the **champion for novel/divergent
+viruses**. This also further weakens the k-fold case: if "more data from this corpus" does not improve
+transfer, fold-splitting the same corpus (~78 h for k=5) is unlikely to produce a better model either.
+Assets: `PROD_20b_full_corpus/evo2/checkpoints/iter_0006000` (115 GB, 12 ckpts retained),
+`train_all.fasta`, `viral_all_{preprocess,dataset}.yaml`, `RUN_full_corpus.sh`,
+`QUEUE_downstream_full_corpus.sh`, `downstream/ds_prod_full_corpus.json`,
+`downstream_ha/{wsn,perth}_results_prod_full_corpus.json`.
+OPS GOTCHA (2026-08-08, NVLS — sharper trigger than previously recorded): the documented
+`NCCL_NVLS_ENABLE=0` fix is needed not only after a `kill -9` of a torchrun, but after **ANY recycling
+of the container on a node that has already run one** — `docker rm -f evo2run` followed by a fresh
+`docker run` reproduces it exactly. All 3 round-2 cluster runs died within 60 s of launch with
+`ncclUnhandledCudaError` / `Failed to bind NVLink SHARP (NVLS) Multicast memory ... CUDA error 401`
+on all 8 ranks. So: **set `NCCL_NVLS_ENABLE=0` whenever the container is recycled rather than freshly
+booted.** `node_run.sh` also carries a detect-and-retry (grep the log for NVLS/Multicast/ncclUnhandled,
+`rm -rf` the partial result dir, relaunch once with the flag) — that safety net is what saved three
+15.6 h slots here, and is worth keeping for any unattended launch on these nodes.
+NOTE ON HOST NAMES (2026-08-07): the box called `h200-2` throughout this log was RENAMED to **`h200`**
+when a separate 4-node cluster (`h200-1`..`h200-4`, shared Lustre `/fsx`) was added. Same machine,
+same data. `h200-2` now resolves to a DIFFERENT host. Read every historical "h200-2" below as `h200`.
+OPS GOTCHA (2026-08-05): the `evo2run` container on h200-2 holds **~1,450 unreaped ZOMBIE `train_evo2`
+processes** from earlier runs (`<defunct>`, reparented to ppid 1, etime ~20 d — the container's PID 1 does
+not reap). A plain `pgrep -f train_evo2` matches those **forever**, so any "wait until training finishes"
+gate built that way never unblocks (it stalled this phase's queued scoring until caught). Count only LIVE
+processes: `ps -eo stat=,args= | grep -v defunct | grep -vE '^[[:space:]]*Z' | grep -c '[t]rain_evo2'`.
+Note the container's `awk` lacks `!~`, so an awk-based zombie filter fails open (silently returns 0).
+Also: never edit a shell script while it is executing — bash reads scripts incrementally and a mid-run
+edit shifts byte offsets (produced one spurious `command not found` here; outputs verified unaffected).

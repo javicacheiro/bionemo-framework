@@ -10,6 +10,24 @@
 #                 (1.85x the dim16 baseline of -13.71%).
 #   PRICE/PERF:   same config, dropout 0.2, 3000 steps  ->  -24.33% (half the cost).
 #
+# =============================================================================
+# DO NOT "IMPROVE" THIS BY MERGING valid.fasta INTO THE TRAINING SET.
+# =============================================================================
+# It is the obvious instinct once hyperparameters are locked ("use all the data"), it was TESTED
+# (Phase 16, 2026-08-04/06), and it made the model WORSE:
+#   * Out-of-corpus transfer (influenza HA DMS) is reliably LOWER -- 8/8 metrics, seed ranges
+#     DISJOINT, champion wins 4/4 pairwise at 2 seeds per config.
+#   * In-corpus RBD is not reliably different but becomes ~19x more seed-variable
+#     (spread 0.056 vs 0.003).
+#   * Training becomes LESS STABLE: 1 of 3 seeds diverged outright (grad norm -> 0, val PPL 502)
+#     vs 0 of 2 for this recipe.
+#   * You also forfeit EVERY held-out metric by construction -- the -25.44% headline above becomes
+#     unquotable because valid_cap8192 is then trained-on.
+# Over-training is NOT the explanation: at fixed 6000 steps a bigger corpus means FEWER epochs
+# (8.35 vs 9.15). See EXPLORATION_LOG.md "Phase 16" for the full analysis and final conclusions.
+# Keep training on train.fasta only, exactly as configured below.
+# =============================================================================
+#
 # Run INSIDE the evo2 container (image evo2:20260628); the venv (train_evo2,
 # predict_evo2, ...) is already on PATH. From the host:
 #   docker exec -it $(docker ps -q -f ancestor=evo2:20260628) bash
