@@ -93,6 +93,13 @@ Because the meta columns match HA's, **`analyze_ha.py` is reused unchanged**.
 
 ## 5. Results (2026-08-08) — the LoRA transfers to HIV, and the champion-vs-full gap REPLICATES
 
+> **⚠ SUPERSEDED IN PART (2026-08-10, Phase 16-EPOCH).** The champion-vs-full-corpus deficit
+> below was measured at a FIXED 6000 steps, which confounds corpus size with epoch count
+> (bigger corpus = fewer passes). Re-running the full corpus at MATCHED epochs recovers ~59%
+> of the deficit on average and **100% on HA Perth** (0.0653 -> 0.1140 vs champion 0.1113).
+> Treat the numbers below as a fixed-step comparison, not as a corpus-size effect.
+> See `EXPLORATION_LOG.md` "Phase 16-EPOCH".
+
 Seven models scored concurrently, one per GPU, ~1.5 h. Spearman (all substitutions):
 
 | model | seeds | BF520 | BG505 |

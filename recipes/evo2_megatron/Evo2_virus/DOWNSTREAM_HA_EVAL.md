@@ -111,6 +111,13 @@ windows, correlated with replicate-averaged DMS preference effect. AUROC target 
 
 ## 4b. Full-corpus adapter (Phase 16, 2026-08-05) — transfers WORSE than the champion
 
+> **⚠ SUPERSEDED IN PART (2026-08-10, Phase 16-EPOCH).** The champion-vs-full-corpus deficit
+> below was measured at a FIXED 6000 steps, which confounds corpus size with epoch count
+> (bigger corpus = fewer passes). Re-running the full corpus at MATCHED epochs recovers ~59%
+> of the deficit on average and **100% on HA Perth** (0.0653 -> 0.1140 vs champion 0.1113).
+> Treat the numbers below as a fixed-step comparison, not as a corpus-size effect.
+> See `EXPLORATION_LOG.md` "Phase 16-EPOCH".
+
 Same benchmark, same `pred_base`, same predict settings (mbs 1, bf16_mixed + vortex-FP8). Adapter =
 `PROD_20b_full_corpus/evo2/checkpoints/iter_0006000`: champion hyperparameters, but trained on the
 **whole corpus** (train + valid merged, 14,292 records, no held-out set).

@@ -890,22 +890,27 @@ corpus progressively trades away out-of-corpus transfer) over the "adding valid 
 a worse basin" alternative, which predicted a threshold. Not proof, but the ablation now points one way.
 
 ### Phase 16-FINAL (2026-08-09) — n≈5 per arm on 3 virus families. Both surviving claims HOLD.
-Second cluster round brought every arm to n=5 (full n=4 at time of writing; `full_s5678` still
-training on h200). Every model scored on all five readouts. Mean ± sd across seeds:
+CAMPAIGN COMPLETE: **n=5 on every arm** (15 runs of 6000 steps; `full_s5678` finished 2026-08-09
+20:30 UTC, all clean, 0 nan). Every model scored on all five readouts. Mean ± sd across seeds:
 
-| benchmark | champion (n=5) | half (n=5) | full (n=4) | gap c−f | ranges | pairwise | dose |
-|---|---|---|---|---:|:--:|:--:|:--:|
-| HA WSN    | 0.2801 ± 0.024 | 0.2396 ± 0.042 | 0.2346 ± 0.022 | +0.0455 | OVERLAP | 19/20 | ✔ |
-| HA Perth  | 0.1113 ± 0.021 | 0.0933 ± 0.031 | 0.0655 ± 0.019 | +0.0458 | **DISJOINT** | **20/20** | ✔ |
-| Env BF520 | 0.2311 ± 0.019 | 0.2167 ± 0.024 | 0.2051 ± 0.016 | +0.0260 | OVERLAP | 18/20 | ✔ |
-| Env BG505 | 0.2285 ± 0.025 | 0.2039 ± 0.020 | 0.1929 ± 0.025 | +0.0356 | OVERLAP | 17/20 | ✔ |
-| RBD       | 0.3454 ± 0.033 | 0.3275 ± 0.018 | 0.3250 ± 0.033 | +0.0204 | OVERLAP | 12/20 | ✔ |
+| benchmark | champion (n=5) | half (n=5) | full (n=5) | gap c−f | pairwise | dose |
+|---|---|---|---|---:|:--:|:--:|
+| HA WSN    | 0.2801 ± 0.024 | 0.2396 ± 0.042 | 0.2262 ± 0.027 | +0.0539 | 24/25 | ✔ |
+| HA Perth  | 0.1113 ± 0.021 | 0.0933 ± 0.031 | 0.0653 ± 0.016 | +0.0460 | **25/25** | ✔ |
+| Env BF520 | 0.2311 ± 0.019 | 0.2167 ± 0.024 | 0.2082 ± 0.016 | +0.0230 | 22/25 | ✔ |
+| Env BG505 | 0.2285 ± 0.025 | 0.2039 ± 0.020 | 0.1982 ± 0.025 | +0.0303 | 19/25 | ✔ |
+| RBD       | 0.3454 ± 0.033 | 0.3275 ± 0.018 | 0.3310 ± 0.031 | +0.0144 | 15/25 | no |
 
 **BOTH surviving claims hold at n=5, on 2 out-of-corpus families / 4 strains:**
-1. **champion > full on every benchmark**, **74 of 80** pairwise seed comparisons out-of-corpus, and
-   Perth (the cleanest benchmark) still fully DISJOINT at 20/20.
-2. **Dose-response monotonic on 4/4 out-of-corpus strains** (champion > half > full), now with the
-   half arm at n=5 rather than the n=1 that made this ambiguous for two days.
+1. **champion > full on every out-of-corpus benchmark**, **90 of 100** pairwise seed comparisons, and
+   Perth (the cleanest benchmark) at a perfect **25/25**.
+2. **Dose-response monotonic on 4/4 out-of-corpus strains** (champion > half > full), with the half
+   arm at n=5 rather than the n=1 that made this ambiguous for two days.
+
+**RBD confirms its own uselessness for this comparison**: at n=5 it is the ONE benchmark where the
+dose ordering fails (half 0.3275 < full 0.3310) and pairwise drops to 15/25 with a +0.0144 gap against
+sd ~0.03. Exactly as the RBD VARIANCE CORRECTION predicted — an in-corpus benchmark whose seed noise
+swamps the effect. Do not use it to compare training configurations.
 
 Effect sizes are modest and comparable to within-arm sd (gaps 0.026–0.046 vs sd 0.016–0.042), which is
 why RANGES OVERLAP on 3 of 4 strains and why single-seed comparisons were so misleading here. State
@@ -957,6 +962,95 @@ The study therefore stands on **3 virus families / 4 clean-or-near-clean strains
 partial, Env BF520, Env BG505), which is what Phase 16-FINAL rests on. Extending it needs a DMS from
 outside the Bloom-lab preference corpus (e.g. a ProteinGym-style fitness dataset on a hypervariable
 virus such as HCV NS5A), which is a different data format and a separate piece of work.
+
+### Phase 16-EPOCH (2026-08-10) — ⚠ MAJOR CORRECTION: ~59% of the "corpus" effect was EPOCH COUNT
+**Everything in Phase 16 compared corpora at a FIXED 6000 steps, which confounds corpus size with
+number of passes over the data.** At fixed steps the token budget is constant (6000 x 16 x 16384 =
+1.573 B), so a larger corpus is traversed FEWER times:
+
+| corpus | Mtok | epochs @6000 | HA Perth transfer |
+|---|---:|---:|---:|
+| champion | 171.80 | **9.15** | 0.1113 |
+| half     | 179.85 | 8.75 | 0.0933 |
+| full     | 188.46 | **8.35** | 0.0653 |
+
+Transfer fell in exactly the order epochs fell. "More epochs is better" fit the data as well as
+"corpus specialization" did — and the two could not be separated by any run in the phase.
+**This was a flaw in the design, not a subtlety**: the epoch arithmetic was used earlier in this very
+phase to rule OUT over-training as the cause of full-corpus's deficit, without noticing the same
+arithmetic supplied a competing explanation for the champion's advantage.
+
+**THE TEST.** Hold epochs at the champion's 9.155 and vary only corpus size: full corpus at **6582
+steps** (n=3, seeds 1234/3456/4567) and half at **6281** (n=1). `--decay-steps` tracked `--max-steps`
+so the cosine keeps its shape. All ran clean (0 nan). Held-out/fit PPL 1.890/1.900/1.890 (val-set).
+
+| benchmark | champion @6k | full @6k | **full @MATCHED epochs** | gap closed |
+|---|---:|---:|---:|---:|
+| HA WSN    | 0.2801 | 0.2262 | 0.2458 ± 0.026 | **36%** |
+| HA Perth  | 0.1113 | 0.0653 | **0.1140 ± 0.026** | **106%** |
+| Env BF520 | 0.2311 | 0.2082 | 0.2175 ± 0.014 | **41%** |
+| Env BG505 | 0.2285 | 0.1982 | 0.2147 ± 0.004 | **54%** |
+| RBD       | 0.3454 | 0.3310 | 0.3035 ± 0.024 | −192% (noise; RBD is uninformative) |
+
+**Out-of-corpus mean: matching epochs recovers ~59% of the deficit. On Perth — the CLEANEST benchmark,
+the one we argued should carry the most weight — it recovers ALL of it (0.1140 vs 0.1113).**
+half @matched (n=1) points the same way: Perth 0.1459, the highest Perth value recorded for ANY
+configuration in the study.
+
+#### Corrected conclusions (these supersede Phase 16-FINAL where they conflict)
+1. **The dominant driver is EPOCHS, not corpus size.** ~59% of the out-of-corpus deficit, and 100% of
+   it on the cleanest benchmark, is explained by the larger corpus receiving fewer passes at fixed steps.
+2. **A residual ~40% remains on WSN and Env** and may be a genuine corpus effect — but it is now the
+   same order as seed noise (sd 0.004–0.026) and is NOT claimed here. Testing it needs matched-epoch
+   runs at more seeds, and ideally a corpus SMALLER than the champion's.
+3. **THE PRACTICAL ADVICE INVERTS.** Do **not** withhold data to protect transfer. Use the full corpus
+   and **scale steps to hold epochs constant** (steps = 9.155 x corpus_tokens / (gbs x seq_len)).
+   `RECIPE.sh`'s warning against merging valid into train was wrong as stated and has been corrected.
+4. **What still stands from Phase 16, unaffected:** the LoRA transfers to 3 virus families with the base
+   at ~0 (Env base 0.028/0.043 -> LoRA 0.16–0.25); RBD cannot compare configurations; the contamination
+   ranking and the exemplar-drift rule; and the seed-variance methodology.
+5. **METHODOLOGICAL LESSON, the important one.** Four claims in this phase were overturned by more data
+   (RBD variance at n=3, contamination-tracking, range disjointness, and now the headline itself).
+   Every one was a case of an alternative explanation not being *designed against*. Fixed-step
+   comparisons across different dataset sizes are confounded by construction — **match epochs or tokens
+   seen, never steps**, whenever corpus size, context length, or batch size varies.
+
+### Phase 17 (2026-08-15) — PEFT memory audit: the 40B runs at TP=2, and the old TP rationale was wrong
+Measured, not theorised. 60-step LoRA runs (dim256, seq 16384, mbs 1, recompute-1) on 8xH200 (143 GB),
+sweeping model size x tensor-parallel degree. Logs: `/fsx/evo2/evo2_data/logs/memaudit/`.
+
+| config | result | params (B) | theoretical W+opt (MB) | peak reserved (GB) |
+|---|---|---:|---:|---:|
+| 7B TP=1  | ok  | 5.04 | 36,019 | 42.7 |
+| 20B TP=1 | ok  | 15.31 | 109,476 | 133.3 |
+| 20B TP=2 | ok  | 15.31 | 65,685 | 67.0 |
+| 20B TP=4 | ok  | 15.31 | 43,790 | 34.2 |
+| **40B TP=1** | **OOM** | — | — | — |
+| **40B TP=2** | **ok** | 31.88 | 136,825 | **139.1** |
+| 40B TP=4 | ok  | 31.88 | 91,217 | 70.9 |
+
+**FINDING 1 — the 40B does not need TP=4.** It trains at **TP=2** (139.1 GB of 143 GB), halving
+tensor-parallel communication. Phase 9 settled on TP=4 after four OOM smokes and **never tried TP=2**,
+because the explanation it had adopted implied a buffer far too large to fit. Headroom is ~4 GB, so
+keep `expandable_segments:True` and re-measure before raising seq-length or micro-batch.
+
+**FINDING 2 — CORRECTION to Phase 9's explanation.** Phase 9 recorded: *"Megatron pre-allocates a full
+fp32 main_grad buffer for ALL params incl. frozen LoRA base -> ~80 GB weights + ~160 GB grad buffer in
+pure DP; this buffer IS TP-sharded so TP is required."* **That is wrong.** `megatron.core` 0.17.0rc0
+skips frozen parameters *before* buffer allocation —
+`distributed_data_parallel.py`: `if not param.requires_grad: continue`, and
+`_allocate_buffers_for_parameters` then asserts `param.requires_grad`. There is no frozen-param grad
+buffer to blame. The measurements agree: peak memory scales as ~1/TP (20B: 133.3 -> 67.0 -> 34.2),
+tracking the theoretical weight+optimizer figure, i.e. **weights and optimizer state being sharded**.
+The 40B OOMs at TP=1 for the ordinary reason — ~32 B parameters do not fit unsharded alongside
+activations. The corrected text is also in the persistent project memory and the `evo2-lora-finetune`
+skill; `RESULTS_SUMMARY.md` and `report/` still carry the old wording and should be fixed on the next
+docs pass.
+
+**CONSEQUENCE for the research portfolio.** "Memory-optimal PEFT — remove frozen-parameter gradient
+buffers" is **already fixed upstream** and is not an available project on this stack. Any future
+systems work here should start from the measured table above, not from the assumption that PEFT
+retains full-fine-tuning memory cost.
 
 ### Phase 16 — FINAL CONCLUSIONS
 1. **Training on the full corpus does NOT produce a better model; it produces a worse-transferring one.**

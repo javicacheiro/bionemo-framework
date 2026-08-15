@@ -11,21 +11,31 @@
 #   PRICE/PERF:   same config, dropout 0.2, 3000 steps  ->  -24.33% (half the cost).
 #
 # =============================================================================
-# DO NOT "IMPROVE" THIS BY MERGING valid.fasta INTO THE TRAINING SET.
+# IF YOU ADD DATA, SCALE THE STEPS TO KEEP EPOCHS CONSTANT.
 # =============================================================================
-# It is the obvious instinct once hyperparameters are locked ("use all the data"), it was TESTED
-# (Phase 16, 2026-08-04/06), and it made the model WORSE:
-#   * Out-of-corpus transfer (influenza HA DMS) is reliably LOWER -- 8/8 metrics, seed ranges
-#     DISJOINT, champion wins 4/4 pairwise at 2 seeds per config.
-#   * In-corpus RBD is not reliably different but becomes ~19x more seed-variable
-#     (spread 0.056 vs 0.003).
-#   * Training becomes LESS STABLE: 1 of 3 seeds diverged outright (grad norm -> 0, val PPL 502)
-#     vs 0 of 2 for this recipe.
-#   * You also forfeit EVERY held-out metric by construction -- the -25.44% headline above becomes
-#     unquotable because valid_cap8192 is then trained-on.
-# Over-training is NOT the explanation: at fixed 6000 steps a bigger corpus means FEWER epochs
-# (8.35 vs 9.15). See EXPLORATION_LOG.md "Phase 16" for the full analysis and final conclusions.
-# Keep training on train.fasta only, exactly as configured below.
+# The 6000 steps above are tuned for train.fasta (171.80 Mtok) and give 9.155 passes over it:
+#     epochs = max_steps x global_batch x seq_len / corpus_tokens
+#            = 6000 x 16 x 16384 / 171.80e6 = 9.155
+# Enlarging the corpus WITHOUT raising --max-steps silently trains for fewer passes, and that costs
+# out-of-corpus transfer. To keep a bigger corpus comparable:
+#     max_steps = 9.155 x corpus_tokens / (16 x 16384)
+# e.g. train+valid (188.46 Mtok) needs 6582 steps, not 6000. Set --decay-steps to match --max-steps
+# so the cosine keeps its shape (leaving it at 6000 parks the tail at the min-lr floor).
+#
+# HISTORY, because this file previously said the opposite. Phase 16 (2026-08-04/06) merged valid into
+# train at a FIXED 6000 steps, measured worse out-of-corpus transfer, and concluded "do not merge".
+# That comparison was CONFOUNDED: at fixed steps the larger corpus got 8.35 epochs vs 9.155. Redoing
+# it at matched epochs (Phase 16-EPOCH, 2026-08-10, n=3) recovered ~59% of the deficit on average and
+# 100% on the cleanest benchmark (HA Perth: 0.0653 -> 0.1140 vs champion 0.1113). A residual ~40%
+# remains on two benchmarks but is within seed noise and is not claimed.
+#
+# STILL TRUE, and the real reason to keep a held-out split:
+#   * Merging valid into train forfeits EVERY held-out metric by construction -- the -25.44% headline
+#     above becomes unquotable, because valid_cap8192 is then trained-on. Keep a held-out split unless
+#     you have an external benchmark to evaluate on.
+#   * 1 of 3 full-corpus seeds diverged (grad norm -> 0, val PPL 502) vs 0 of 5 for this recipe. Small
+#     numbers, but watch iters 100-300 and see the divergence signature in EXPLORATION_LOG.md.
+# See EXPLORATION_LOG.md "Phase 16-EPOCH" for the correction and the full numbers.
 # =============================================================================
 #
 # Run INSIDE the evo2 container (image evo2:20260628); the venv (train_evo2,
@@ -100,6 +110,29 @@ python3 /data/viral/aggregate_ppl.py \
 #  * dim256 is the right capacity at every scale; length helps to ~6k then hits the data-limited ceiling.
 #  * 20B is the price/perf sweet spot -- the 40B does NOT surpass it and is far more fragile.
 #  * 7B uses bf16 without vortex-FP8 and loads as --model-size evo2_7b_base (11008 MLP dim; evo2_7b errors).
+#
+# MEASURED PARALLELISM / MEMORY  (2026-08-15 audit, 8xH200 143 GB, seq 16384, mbs 1, recompute-1,
+# LoRA dim256; 60-step runs. Logs: /fsx/evo2/evo2_data/logs/memaudit/)
+#
+#   config      result   params(B)  theor W+opt(MB)  peak reserved(GB)
+#   7B  TP=1    ok        5.04       36 019           42.7
+#   20B TP=1    ok       15.31      109 476          133.3
+#   20B TP=2    ok       15.31       65 685           67.0
+#   20B TP=4    ok       15.31       43 790           34.2
+#   40B TP=1    OOM        --           --              --
+#   40B TP=2    ok       31.88      136 825          139.1     <-- WORKS; use this, not TP=4
+#   40B TP=4    ok       31.88       91 217           70.9
+#
+#  * **The 40B runs at TP=2**, at 139.1 GB of 143 GB. Earlier work used TP=4 and never tried TP=2,
+#    because a (wrong) theory said an FP32 grad buffer was allocated for the FROZEN base params and
+#    would not fit. It is not: megatron.core 0.17.0rc0 skips frozen params before buffer allocation
+#    (`distributed_data_parallel.py`: `if not param.requires_grad: continue`). TP=2 halves the
+#    tensor-parallel communication vs TP=4. Headroom is only ~4 GB, so keep
+#    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True and do not raise seq-length or mbs without
+#    re-measuring; drop to TP=4 if you do.
+#  * Peak memory scales as ~1/TP (20B: 133.3 -> 67.0 -> 34.2), tracking the theoretical
+#    weight+optimizer figure. That is weights and optimizer state being sharded -- the 40B OOMs at
+#    TP=1 simply because ~32 B params do not fit unsharded alongside activations.
 # =============================================================================
 #
 # OPTIONAL — dsRNA reverse-complement (RC) augmentation  [Phase 14; NOT part of the default recipe]
