@@ -1015,6 +1015,191 @@ configuration in the study.
    comparisons across different dataset sizes are confounded by construction — **match epochs or tokens
    seen, never steps**, whenever corpus size, context length, or batch size varies.
 
+### Phase 16-EPOCH-B (2026-08-15/17) — MORE epochs does NOT help. The 9.155-epoch setting is at a plateau, and the "extra steps diverge" effect was the LR SCHEDULE, not the steps.
+Phase 16-EPOCH established that epochs, not corpus size, drove the transfer differences — which raises
+the obvious follow-up it did not test: **if 9.155 epochs beats 8.35, does 13.7 beat 9.155?** All of
+Phase 16-EPOCH's evidence was about *restoring* a deficit up to the champion's epoch count; nothing in
+it says the champion sits at an optimum rather than on a rising slope.
+
+Test: champion corpus (171.80 Mtok), champion hyper-parameters, **9000 steps = 13.73 epochs** vs the
+champion's 6000 = 9.155. Two variants, because the naive one turned out to change two things at once:
+
+| variant | `--max-steps` | `--decay-steps` | what it does |
+|---|---:|---:|---|
+| (stretched) | 9000 | 9000 | cosine stretched over 9000 — **LR is higher at EVERY early iteration** than the champion |
+| (a) fixed-decay | 9000 | **6000** | first 6000 steps **bit-identical** to the champion at the same seed; extra 3000 run at the `--min-lr` floor (3e-5) |
+
+#### FINDING 1 — the stretched variant's divergences were caused by the SCHEDULE, and the paired seed proves it
+The stretched arm lost **2 of 4 seeds** (s4567, s7890) against **0 of 5** for the champion at 6000 on
+the same corpus. The fixed-decay arm lost **0 of 3**, *including seed 4567 — the seed that died
+stretched*. Same seed, same corpus, same data order; only the cosine differs:
+
+```
+       stretched s4567                  fixed-decay s4567
+  it  50  loss 1.161358  gn 0.109    it  50  loss 1.161153  gn 0.121
+  it 100  loss 1.096958  gn 0.116    it 100  loss 1.096346  gn 0.114
+  it 150  loss 1.277099  gn 0.085  <-- inverts    it 150  loss 1.064188  gn 0.129
+  it 200  loss 1.371125  gn 0.181    it 200  loss 1.028054  gn 0.151
+  it 450  loss 1.371031  gn 0.013    it 450  loss 0.967765  gn 0.158
+  it 500  loss 4.189558  gn 0.000    it 600  loss 0.944861  gn 0.181
+```
+The two runs are numerically near-identical for 100 iterations (the LR differs only slightly that
+early), then split. `s7890` failed the same way from the other direction: healthy to iteration 250,
+then **grad norm spikes to 2.721 at iteration 300**, after which loss pins at ~1.371 and grad norm
+collapses to ~0.01 — the same dead-adapter signature (loss ~1.371, gn -> 0) recorded in Phase 16.
+This is the documented **alpha x LR stability edge**: alpha 1024 at lr 3e-4 sits on it, and stretching
+the cosine holds the LR above the champion's trajectory long enough to fall off.
+
+**Rule: when you raise `--max-steps`, do NOT assume `--decay-steps` should follow.** Stretching the
+cosine is a *different intervention* from training longer, and on this recipe it is the dangerous one.
+
+#### FINDING 2 — more epochs buys NOTHING downstream. This is a null result.
+Fixed-decay n=3 (seeds 1234/3456/4567) vs the champion n=5 at 6000 steps. Pairwise counts are computed
+against champion per-seed values recoverable from files on the cluster (n varies by benchmark; champion
+s1234's HA JSONs did not survive the h200 migration, so HA pairwise is 3x4 not 3x5):
+
+| benchmark | champion @6k (n=5) | **fixed-decay @9k (n=3)** | delta | in champion sd | pairwise fd>champ |
+|---|---:|---:|---:|---:|:--:|
+| HA WSN    | 0.2801 ± 0.024 | 0.2776 ± 0.020 | −0.0025 | 0.10 | 5/12 |
+| HA Perth  | 0.1113 ± 0.021 | 0.1331 ± 0.042 | +0.0218 | 1.04 | 8/12 |
+| Env BF520 | 0.2311 ± 0.019 | 0.2292 ± 0.020 | −0.0019 | 0.10 | 7/15 |
+| Env BG505 | 0.2285 ± 0.025 | 0.2155 ± 0.016 | −0.0130 | 0.52 | 6/15 |
+| RBD       | 0.3454 ± 0.033 | 0.3380 ± 0.031 | −0.0074 | 0.22 | 5/9 |
+
+**31 of 63 pairwise comparisons favour the extra epochs — a coin flip (49%).** Three of five deltas are
+within 0.10–0.22 sd of zero. Perth is the only benchmark showing a nominal gain (+1.04 sd), and its
+three seeds are 0.1182 / 0.1801 / 0.1009 — a spread of 0.079 against the champion's sd of 0.021, so
+that mean rests on one high draw and is not claimed. Held-out PPL agrees: `ep9k_s1234` val PPL 2.439 /
+test 2.472 and `ep9k_s3456` 2.441 / 2.423, flat against the champion's ~2.41 despite 50% more steps.
+
+For completeness, the stretched arm (n=2, and **survivorship-biased** — these are the seeds that
+survived; the two that died produce no checkpoint and cannot be scored, so this row flatters the
+config): WSN 0.2665, Perth 0.1387, BF520 0.2445, BG505 0.2530, RBD 0.3037. Its Perth seeds are 0.1892
+and 0.0882 — a spread of 0.101, ~5x the champion's sd, on the benchmark that is otherwise the cleanest.
+
+#### Conclusions
+1. **6000 steps / 9.155 epochs stays the recommendation.** 13.73 epochs is not better on any benchmark
+   beyond noise, and costs 50% more compute. Phase 16-EPOCH's "match epochs when the corpus grows"
+   advice is unchanged — but it is a rule for *restoring* passes over a larger corpus, **not** an
+   argument that more passes keep helping. The response has plateaued by ~9 epochs.
+2. **Raising `--max-steps` must not silently stretch the cosine on this recipe.** Keep `--decay-steps`
+   where it was, or accept a materially higher divergence rate (2/4 vs 0/5 here).
+3. **CAVEAT, and it bounds claim 1.** Fixed-decay answers *"does extra exposure help?"* — it does not
+   answer *"is a longer schedule better?"*. A min-LR tail is not the same intervention as a longer
+   cosine, and the stretched arm cannot answer it either because half its seeds died. A proper test of
+   longer schedules needs a lower LR (or lower alpha) to get off the stability edge first, and is only
+   worth running if there is a reason to expect a gain — this phase provides none.
+4. **Method note.** The stretched runs were launched first and the divergences were initially read as
+   "more epochs destabilises training". That reading was wrong and would have gone into the log as a
+   property of epoch count. It was caught only because the fixed-decay variant was designed to hold the
+   LR trajectory constant — i.e. by *designing against* the alternative explanation, the same lesson
+   Phase 16-EPOCH's correction records. Two variables moved; only one was the intended one.
+
+Artifacts: `node_run_fixeddecay.sh` (documents the decay-steps rationale in its header);
+`/fsx/evo2/evo2_data/logs/train_ep9k{,fd}_s*.log`; adapters under `/fsx/evo2/evo2_data/runs/ep9k*`.
+
+### Phase 16-EPOCH-C (2026-08-20/23) — the dose-response is NOT one axis. It is a per-family SPLIT, and it is explained by which benchmark's own sequence survives a stride-2 subsample.
+Phase 16-CLUSTER/FINAL read `champion > half > full` as a single monotonic axis ("less of this corpus
+transfers better") and never tested the low end. With the cluster idle and the epoch-matching arithmetic
+now cheap on a smaller corpus, this phase tests below the champion for the first time, and separates
+corpus SIZE from training COMPUTE — a distinction Phase 16-EPOCH's "match epochs" rule did not need to
+make, because it only ever matched epochs on a corpus LARGER than the champion's (more tokens seen, not
+fewer).
+
+**Corpus:** `train_sub50.fasta` — the champion corpus (12,944 records) stride-2 subsampled to 6,472
+records (85.9 Mtok, exactly half), the same construction Phase 16-ABLATION used. Two arms, n=3
+(seeds 1234/3456/4567):
+
+| arm | steps | epochs | tokens seen | isolates |
+|---|---:|---:|---:|---|
+| champion (reference) | 6000 | 9.155 | 1.573 B | — |
+| sub50ep (matched epochs) | 3010 | 9.155 | 0.789 B | corpus size, at HALF the compute |
+| sub50st (matched compute) | 6000 | 18.31 | 1.573 B | corpus size, at the SAME compute |
+
+All 6 runs clean, 0 nan. `sub50st` is the one that isolates corpus size cleanly (same token budget as
+the champion, half the unique data) — `sub50ep` confounds size with compute, exactly as flagged when it
+was queued.
+
+#### FINDING — champion vs sub50st (matched compute, corpus size is the only variable):
+
+| benchmark | champion (n=3) | sub50st (n=3) | delta | pairwise st>champ |
+|---|---:|---:|---:|:--:|
+| HA WSN    | 0.2812 ± 0.027 | **0.3558 ± 0.015** | **+0.075** | **9/9** |
+| HA Perth  | 0.1212 ± 0.023 | **0.1712 ± 0.034** | **+0.050** | **9/9** |
+| Env BF520 | 0.2413 ± 0.013 | 0.1079 ± 0.008 | −0.133 | 0/9 |
+| Env BG505 | 0.2403 ± 0.026 | 0.1299 ± 0.026 | −0.110 | 0/9 |
+| RBD       | 0.3667 ± 0.005 | 0.2496 ± 0.032 | −0.117 | 0/9 |
+
+**This is not a size effect — it is a clean split by target family.** Influenza HA (both strains)
+improves sharply and disjointly at HALF the corpus. HIV Env and SARS-CoV-2 RBD collapse, also
+disjointly, in the other direction. Every delta above is 4–8 within-arm sd. The champion-column values
+here are n=3 (seeds with JSONs on the cluster: 1234/2345/6789), not the published n=5; they read
+0.2812/0.1212 vs the published 0.2801/0.1113 — a small shift from n, not a different conclusion.
+
+`sub50ep` (matched epochs, half the compute) shows the SAME split, smaller: WSN 0.3214, Perth 0.1097,
+BF520 0.1492, BG505 0.1390, RBD 0.2526. Comparing `sub50st` to `sub50ep` on the SAME corpus therefore
+isolates compute alone: +0.034 WSN, +0.062 Perth, but only −0.041/−0.009/−0.003 on BF520/BG505/RBD.
+**More compute helps only the family the corpus already favours.** This is why "more epochs" and "more
+data" could not be separated by any single-corpus experiment: their effect sizes track which family you
+are looking at.
+
+#### MECHANISM — k-mer containment against the actual benchmark reference genomes explains the split exactly
+Exact 31-mer probe (stride 10 bp, both strands, `p<4^-31≈4e-11` false-positive rate) of each benchmark's
+reference sequence against the full-length corpus. Method and script: `/fsx/evo2/results/kmer_probe.py`
+extended per-strain (probes generated from the actual `_ref_WT`/`_ref` FASTA record used to build each
+benchmark, not a single 90-mer as in the original Phase 16 check):
+
+| benchmark | containment, champion (171.8 Mtok) | containment, sub50 (85.9 Mtok) | retained | sub50st − champion, downstream |
+|---|---:|---:|---:|---:|
+| HA WSN    | 19.76% | 19.76% | **100%** | **+0.075** |
+| HA Perth  |  0.00% |  0.00% | n/a (never present) | **+0.050** |
+| Env BF520 |  3.16% |  0.00% | 0% | −0.133 |
+| Env BG505 |  2.73% |  0.00% | 0% | −0.110 |
+| RBD       | 100.00% |  1.84% | 1.8% | −0.117 |
+
+**The stride-2 split preserved 100% of the HA-related material and stripped 98–100% of the Env/RBD-
+related material, and the downstream direction matches exactly.** Confirmed directly for RBD: the
+benchmark's own source genome, **MN908947 (SARS-CoV-2 reference)**, is present once in `train.fasta` and
+absent from `train_sub50.fasta` — stride-2 happened to drop that specific record. HA Perth's 0% in BOTH
+corpora independently reproduces the earlier "Perth is the cleanest benchmark" claim from a different
+method (whole-corpus k-mer scan vs. the original single 90-mer check) — it never shared sequence with
+this corpus at all, so its downstream *gain* here is a genuine transfer effect, not reduced leakage.
+
+**Why this was invisible in Phase 16-CLUSTER/FINAL:** `champion > half > full` only samples corpus sizes
+at or above the champion's. Related material for HA, Env, and RBD all happen to be retained at those
+sizes (the champion corpus already contains one instance of each family's reference), so the axis
+looked monotonic. It only fractures once a subsample is small enough to lose a record outright — which
+is a property of *which records a corpus happens to contain*, not of corpus size as a continuous
+quantity.
+
+#### Conclusions
+1. **"champion > half > full" is not a corpus-size law.** It is contamination-driven for RBD (in-corpus,
+   already flagged uninformative in Phase 16 — this only sharpens why) and, on this evidence, ALSO
+   contamination-driven for the two Env strains, not a general transfer effect of shrinking the corpus.
+   HA is the one family where the earlier reading (less corpus -> better OOC transfer) still holds, and
+   it holds strongly (9/9, +0.05–0.075) — but "OOC" is doing less work than assumed, since HA's own
+   related material was never at risk of being removed by this particular subsample.
+2. **RBD and Env BF520/BG505 should not be used to argue FOR a smaller/different corpus** without first
+   checking whether the change altered containment of their reference sequences specifically. The
+   dose-response claimed in Phase 16-CLUSTER ("33/36 pairwise", "monotonic on 4/4 strains") is now only
+   evidence of a containment artifact for 3 of those 4 strains, not evidence about corpus size per se.
+3. **Practical rule, generalizing the existing leakage-audit practice:** before changing a training
+   corpus (subsampling, merging, filtering) and attributing any downstream shift to "transfer", check
+   containment of each benchmark's OWN reference sequence in the new corpus. A shift that tracks
+   containment is not informative about the training recipe.
+4. **What is NOT re-opened:** the champion (full-corpus-at-9.155-epochs) recipe stands. This phase does
+   not identify a better corpus — sub50st is worse on 3 of 5 benchmarks and its RBD/Env losses are exactly
+   as uninformative as full-corpus's were, for the same reason (containment, not capability).
+5. **Backup note:** the 11 adapters from this phase and Phase 16-EPOCH-B were found unstaged (present
+   only under `/fsx/evo2/evo2_data/runs/`, never copied to `/fsx/evo2/adapters/` for S3 sync) during the
+   2026-08-23 wind-down check and were uploaded directly and verified byte-exact
+   (`/fsx/bin/backup_new_adapters.sh`, `/fsx/bin/verify_new_adapters.sh`).
+
+Artifacts: `train_sub50.fasta`/`viral_sub50_{preprocess,dataset}.yaml`; `/fsx/evo2/evo2_data/logs/
+train_sub50{ep,st}_s*.log`; adapters `sub50ep_s{1234,3456,4567}`, `sub50st_s{1234,3456,4567}` (backed up
+to S3 `fsx-evo2/adapters/`); containment probe `/tmp/contain3.py` on h200-1 (not yet committed to the
+repo — promote to a checked-in script if this method is reused).
+
 ### Phase 17 (2026-08-15) — PEFT memory audit: the 40B runs at TP=2, and the old TP rationale was wrong
 Measured, not theorised. 60-step LoRA runs (dim256, seq 16384, mbs 1, recompute-1) on 8xH200 (143 GB),
 sweeping model size x tensor-parallel degree. Logs: `/fsx/evo2/evo2_data/logs/memaudit/`.
@@ -1067,10 +1252,15 @@ retains full-fine-tuning memory cost.
    PPL, on downstream transfer, and on run-to-run reliability. The full-corpus adapter is a **sidegrade**:
    defensible only if the deployment distribution closely matches the training corpus, and it forfeits any
    held-out metric by construction.
-4. **Mechanism still open.** Over-training is ruled out arithmetically (fewer epochs, above). "Corpus
-   specialization" fits but is not proven; distinguishing it from "adding the valid split perturbed a
-   near-edge optimisation into a worse basin" would need more seeds and probably an intermediate-corpus
-   ablation (e.g. train + half of valid).
+4. **Mechanism — PARTLY RESOLVED, see Phase 16-EPOCH-C.** Over-training is ruled out arithmetically
+   (fewer epochs, above). "Corpus specialization" as a general size effect does NOT hold below the
+   champion: extending the dose-response to half the corpus (Phase 16-EPOCH-C, 2026-08-23) found the
+   `champion > half > full` ordering is a per-family split, and for 3 of the 4 out-of-corpus strains
+   (both Env, and RBD in-corpus) it tracks k-mer containment of each benchmark's own reference sequence
+   — i.e. it is a contamination artifact of which records a given corpus subsample happens to contain,
+   not evidence about corpus size. Only HA (both strains) shows a real transfer effect in that test.
+   Whether the historical `champion`/`half`/`full` comparison ABOVE the champion's size is contamination
+   or transfer was not re-checked here and remains open for those three arms.
 5. **k-fold is not worth running** (see the earlier k-fold assessment): more data from this corpus made
    transfer worse, so fold-splitting the same corpus will not produce a better model, and at k=5 it costs
    ~78 h. Spend node time on additional *benchmarks* or *seeds* instead.

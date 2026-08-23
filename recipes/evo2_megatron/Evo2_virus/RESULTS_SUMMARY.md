@@ -365,15 +365,22 @@ spot**, but the NVIDIA checkpoint is the better 40B base (slightly higher gain +
 | run | parallelism | recompute | peak GB/GPU | s/step | TFLOP/s/GPU |
 |---|---|---:|---:|---:|---:|
 | 20B @16k | pure DP | 2 | fits (<143) | ~9.0 | ~400 |
-| 40B @16k | TP=4 | 1 | ~66 | ~23.4 | ~320 |
+| 40B @16k | TP=4 (**TP=2 also works**, 139.1 GB — see Phase 17) | 1 | ~66 | ~23.4 | ~320 |
 | 20B @32k | TP=2 | 1 | 63.8 | ~20.6 | ~414 |
 | 20B @128k | TP=4, CP=1 | 1 | 66.7 | ~110.7 | ~583 |
 
 - **FP8-LoRA enablement** was required for 20B/40B (Hopper BF16 unstable on Savanna 20B/40B): added
   `--vortex-style-fp8` to `train_evo2` + made the FP8 projection LoRA-safe.
-- **Memory driver:** Megatron pre-allocates an fp32 main_grad buffer for ALL params incl. the frozen
-  LoRA base (~6 B/param), sharded by TP not DP → big models / long context need TP. `recompute-num-layers`
-  is a *chunk size* (uniform method) → use 1 for least memory.
+- **Memory driver — CORRECTED 2026-08-15, the earlier explanation here was WRONG.** This previously read
+  *"Megatron pre-allocates an fp32 main_grad buffer for ALL params incl. the frozen LoRA base (~6 B/param),
+  sharded by TP not DP"*. There is **no frozen-param grad buffer**: `megatron.core` 0.17.0rc0 skips frozen
+  params *before* buffer allocation (`distributed_data_parallel.py`: `if not param.requires_grad: continue`).
+  What actually drives the TP requirement is ordinary **weight + optimizer state sharding** — measured peak
+  scales as ~1/TP (20B: 133.3 → 67.0 → 34.2 GB), tracking the theoretical weight+optimizer figure, and the
+  40B OOMs at TP=1 simply because ~32 B params do not fit unsharded alongside activations.
+  **Consequence: the 40B runs at TP=2** (139.1 GB of 143), not just TP=4 — TP=2 was never tried because the
+  wrong theory implied it could not fit. See EXPLORATION_LOG.md "Phase 17" for the measured table.
+  `recompute-num-layers` is a *chunk size* (uniform method) → use 1 for least memory.
 - **Resume/extend is supported** (validated 2026-07-05): re-run same command, same parallelism, at a
   `--result-dir` that already has `iter_*`; base loads via PEFT pre-wrap hook, then adapter+optimizer+
   RNG+iteration+data-position restore. `override_opt_param_scheduler=True` means the LR curve is

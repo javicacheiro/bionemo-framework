@@ -22,6 +22,18 @@
 # e.g. train+valid (188.46 Mtok) needs 6582 steps, not 6000. Set --decay-steps to match --max-steps
 # so the cosine keeps its shape (leaving it at 6000 parks the tail at the min-lr floor).
 #
+# ...BUT ONLY FOR SMALL STRETCHES. A stretched cosine holds the LR ABOVE the champion's trajectory at
+# every early iteration, and this recipe sits on an alpha x LR stability edge (alpha 1024 @ lr 3e-4).
+# The +10% stretch above (6000 -> 6582) ran clean at n=3. A +50% stretch (6000 -> 9000) killed 2 of 4
+# seeds against 0 of 5 for the champion -- and the SAME seeds trained fine at 9000 steps when
+# --decay-steps was left at 6000. If you need to stretch much beyond ~10%, either keep --decay-steps
+# at 6000 (extra steps then run at the min-lr floor) or lower the LR/alpha first. See Phase 16-EPOCH-B.
+#
+# AND DO NOT EXPECT MORE EPOCHS TO HELP. 9000 steps (13.73 epochs) was tested against this recipe's
+# 9.155 at n=3: 31 of 63 pairwise downstream comparisons favoured it, i.e. a coin flip, with held-out
+# PPL flat. The epoch response has PLATEAUED by ~9. The scaling rule above exists to RESTORE passes
+# when the corpus grows -- it is not a reason to add passes. (Phase 16-EPOCH-B, 2026-08-17.)
+#
 # HISTORY, because this file previously said the opposite. Phase 16 (2026-08-04/06) merged valid into
 # train at a FIXED 6000 steps, measured worse out-of-corpus transfer, and concluded "do not merge".
 # That comparison was CONFOUNDED: at fixed steps the larger corpus got 8.35 epochs vs 9.155. Redoing
